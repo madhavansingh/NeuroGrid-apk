@@ -121,10 +121,8 @@ class _TrafficScreenState extends State<TrafficScreen>
 
   // Traffic data
   List<TrafficSegment> _segments = [];
-  List<TrafficSegment> _previousSegments = [];
   bool _isSimulated = false;
   bool _isLoading = true;
-  DateTime? _lastFetchedAt;
 
   // Search / route
   final TextEditingController _searchController = TextEditingController();
@@ -133,7 +131,6 @@ class _TrafficScreenState extends State<TrafficScreen>
 
   // Bottom sheet
   late DraggableScrollableController _sheetController;
-  bool _sheetExpanded = false;
 
   // ── Animation controllers ─────────────────────────────────────────────────
   // Drives the flowing dash / pulse effect on polylines (continuous loop)
@@ -289,10 +286,8 @@ class _TrafficScreenState extends State<TrafficScreen>
     }
 
     setState(() {
-      _previousSegments = List.from(_segments);
       _segments = result.segments;
       _isSimulated = result.isSimulated;
-      _lastFetchedAt = result.fetchedAt;
       _isLoading = false;
       _secondsSinceUpdate = 0;
     });
@@ -343,7 +338,6 @@ class _TrafficScreenState extends State<TrafficScreen>
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeOutCubic,
       );
-      setState(() => _sheetExpanded = true);
     });
   }
 
@@ -358,7 +352,6 @@ class _TrafficScreenState extends State<TrafficScreen>
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
     );
-    setState(() => _sheetExpanded = false);
   }
 
   Future<void> _launchGoogleMapsNavigation() async {

@@ -78,14 +78,9 @@ class _TrafficTrendChartWidgetState extends State<TrafficTrendChartWidget>
     super.dispose();
   }
 
-  List<FlSpot> get _spots => List.generate(
-    _hourlyDensity.length,
-    (i) => FlSpot(i.toDouble(), _hourlyDensity[i]),
-  );
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
 
     return Container(
       padding: const EdgeInsets.all(18),

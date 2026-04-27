@@ -21,8 +21,6 @@ class AppNavigation extends StatefulWidget {
 class _AppNavigationState extends State<AppNavigation>
     with TickerProviderStateMixin {
   late AnimationController _slideController;
-  late Animation<double> _slideAnimation;
-  int _prevIndex = 0;
 
   final List<_NavItem> _items = const [
     _NavItem(
@@ -60,14 +58,9 @@ class _AppNavigationState extends State<AppNavigation>
   @override
   void initState() {
     super.initState();
-    _prevIndex = widget.currentIndex;
     _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
-    );
-    _slideAnimation = CurvedAnimation(
-      parent: _slideController,
-      curve: Curves.easeOutCubic,
     );
   }
 
@@ -75,7 +68,6 @@ class _AppNavigationState extends State<AppNavigation>
   void didUpdateWidget(AppNavigation oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentIndex != widget.currentIndex) {
-      _prevIndex = oldWidget.currentIndex;
       _slideController.forward(from: 0);
     }
   }

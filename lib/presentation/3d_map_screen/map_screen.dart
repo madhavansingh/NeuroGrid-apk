@@ -140,7 +140,6 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
   List<TrafficSegment> _segments = [];
   bool _isSimulated = false;
   bool _isLoading = true;
-  DateTime? _lastFetchedAt;
 
   // Search / route
   final TextEditingController _searchController = TextEditingController();
@@ -153,7 +152,6 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
 
   // Bottom sheet
   late DraggableScrollableController _sheetController;
-  bool _sheetExpanded = false;
 
   // ── Animation controllers ─────────────────────────────────────────────────
   late AnimationController _flowController;
@@ -403,7 +401,6 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
     setState(() {
       _segments = result.segments;
       _isSimulated = result.isSimulated;
-      _lastFetchedAt = result.fetchedAt;
       _isLoading = false;
       _secondsSinceUpdate = 0;
     });
@@ -475,7 +472,6 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeOutCubic,
       );
-      setState(() => _sheetExpanded = true);
     });
   }
 
@@ -490,7 +486,6 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
     );
-    setState(() => _sheetExpanded = false);
   }
 
   Future<void> _launchGoogleMapsNavigation() async {
@@ -1475,13 +1470,10 @@ class _FloatBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final String tooltip;
-  final bool active;
-
   const _FloatBtn({
     required this.icon,
     required this.onTap,
     required this.tooltip,
-    this.active = false,
   });
 
   @override
@@ -1494,7 +1486,7 @@ class _FloatBtn extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: active ? const Color(0xFF1A6BF5) : Colors.white,
+            color: Colors.white,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -1507,7 +1499,7 @@ class _FloatBtn extends StatelessWidget {
           child: Icon(
             icon,
             size: 20,
-            color: active ? Colors.white : const Color(0xFF475569),
+            color: const Color(0xFF475569),
           ),
         ),
       ),
