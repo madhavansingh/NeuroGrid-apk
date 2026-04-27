@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../providers/issues_provider.dart';
 import '../../routes/app_routes.dart';
 import '../../services/civic_issues_service.dart';
 import '../../theme/app_theme.dart';
@@ -9,19 +11,16 @@ import '../../widgets/loading_skeleton_widget.dart';
 import './widgets/issue_card_widget.dart';
 import './widgets/issue_tab_bar_widget.dart';
 
-class CivicIssuesScreen extends StatefulWidget {
+class CivicIssuesScreen extends ConsumerStatefulWidget {
   const CivicIssuesScreen({super.key});
 
   @override
-  State<CivicIssuesScreen> createState() => _CivicIssuesScreenState();
+  ConsumerState<CivicIssuesScreen> createState() => _CivicIssuesScreenState();
 }
 
-class _CivicIssuesScreenState extends State<CivicIssuesScreen>
+class _CivicIssuesScreenState extends ConsumerState<CivicIssuesScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<CivicIssue> _allIssues = [];
-  bool _isLoading = true;
-  dynamic _subscription;
   int _navIndex = 0;
 
   final List<String> _tabs = ['All', 'Pending', 'In Progress', 'Completed'];
@@ -36,75 +35,48 @@ class _CivicIssuesScreenState extends State<CivicIssuesScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
-    _loadIssues();
-    _setupRealtime();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _subscription?.unsubscribe();
     super.dispose();
   }
 
-  Future<void> _loadIssues() async {
-    setState(() => _isLoading = true);
-    final issues = await CivicIssuesService.instance.fetchIssues();
-    if (mounted) {
-      setState(() {
-        _allIssues = issues;
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _setupRealtime() {
-    _subscription = CivicIssuesService.instance.subscribeToIssues(
-      onEvent: (issue, eventType) {
-        if (!mounted) return;
-        setState(() {
-          if (eventType == 'insert') {
-            // Add new issue at top
-            _allIssues.removeWhere((i) => i.id == issue.id);
-            _allIssues.insert(0, issue);
-          } else if (eventType == 'update') {
-            final idx = _allIssues.indexWhere((i) => i.id == issue.id);
-            if (idx != -1) {
-              _allIssues[idx] = issue;
-            } else {
-              _allIssues.insert(0, issue);
-            }
-          } else if (eventType == 'delete') {
-            _allIssues.removeWhere((i) => i.id == issue.id);
-          }
-        });
-      },
-    );
-  }
-
-  List<CivicIssue> _filteredIssues(int tabIndex) {
+  List<CivicIssue> _filteredIssues(List<CivicIssue> all, int tabIndex) {
     final filter = _statusFilters[tabIndex];
-    if (filter == null) return _allIssues;
-    return _allIssues.where((i) => i.status == filter).toList();
+    if (filter == null) return all;
+    return all.where((i) => i.status == filter).toList();
   }
+
+  Future<void> _reload() => ref.read(issuesProvider.notifier).refresh();
 
   @override
   Widget build(BuildContext context) {
+    final issuesAsync = ref.watch(issuesProvider);
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(),
+            // Header — use data from provider so count is always live
+            issuesAsync.when(
+              data: (issues) => _buildHeader(issues.length, isError: false),
+              loading: () => _buildHeader(0, isError: false),
+              error: (_, __) => _buildHeader(0, isError: true),
+            ),
             IssueTabBarWidget(tabController: _tabController, tabs: _tabs),
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: List.generate(_tabs.length, (index) {
-                  return _isLoading
-                      ? _buildSkeletonList()
-                      : _buildIssueList(_filteredIssues(index));
-                }),
+              child: issuesAsync.when(
+                data: (issues) => TabBarView(
+                  controller: _tabController,
+                  children: List.generate(_tabs.length, (index) {
+                    return _buildIssueList(_filteredIssues(issues, index));
+                  }),
+                ),
+                loading: () => _buildSkeletonList(),
+                error: (err, _) => _buildErrorState(),
               ),
             ),
           ],
@@ -113,7 +85,8 @@ class _CivicIssuesScreenState extends State<CivicIssuesScreen>
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.pushNamed(context, AppRoutes.reportIssueScreen);
-          _loadIssues();
+          // Refresh after returning from report screen in case WS missed it
+          _reload();
         },
         backgroundColor: AppTheme.primary,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
@@ -133,7 +106,9 @@ class _CivicIssuesScreenState extends State<CivicIssuesScreen>
     );
   }
 
-  Widget _buildHeader() {
+  // ── Header ─────────────────────────────────────────────────────────────────
+
+  Widget _buildHeader(int count, {required bool isError}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
@@ -175,17 +150,19 @@ class _CivicIssuesScreenState extends State<CivicIssuesScreen>
                   ),
                 ),
                 Text(
-                  '${_allIssues.length} total reports',
+                  isError
+                      ? 'Could not load issues'
+                      : '$count total reports',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.textMuted,
+                    color: isError ? AppTheme.error : AppTheme.textMuted,
                   ),
                 ),
               ],
             ),
           ),
           GestureDetector(
-            onTap: _loadIssues,
+            onTap: _reload,
             child: Container(
               width: 38,
               height: 38,
@@ -211,6 +188,8 @@ class _CivicIssuesScreenState extends State<CivicIssuesScreen>
       ),
     );
   }
+
+  // ── Loading skeletons ──────────────────────────────────────────────────────
 
   Widget _buildSkeletonList() {
     return ListView.builder(
@@ -277,6 +256,69 @@ class _CivicIssuesScreenState extends State<CivicIssuesScreen>
     );
   }
 
+  // ── Error state ────────────────────────────────────────────────────────────
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: AppTheme.errorLight,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Icon(
+              Icons.cloud_off_rounded,
+              size: 36,
+              color: AppTheme.error,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Could not reach server',
+            style: GoogleFonts.dmSans(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Check your connection and tap refresh',
+            style: GoogleFonts.dmSans(
+              fontSize: 13,
+              color: AppTheme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: _reload,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Retry',
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Issue list ─────────────────────────────────────────────────────────────
+
   Widget _buildIssueList(List<CivicIssue> issues) {
     if (issues.isEmpty) {
       return Center(
@@ -325,10 +367,21 @@ class _CivicIssuesScreenState extends State<CivicIssuesScreen>
         return IssueCardWidget(
           issue: issues[index],
           onSimulateUpdate: () async {
-            await CivicIssuesService.instance.simulateOperatorUpdate(
-              issues[index].id,
-              issues[index].status,
-            );
+            final issue = issues[index];
+            String nextStatus;
+            switch (issue.status) {
+              case 'pending':
+                nextStatus = 'in_progress';
+                break;
+              case 'in_progress':
+                nextStatus = 'resolved';
+                break;
+              default:
+                return;
+            }
+            await ref
+                .read(issuesProvider.notifier)
+                .updateStatus(issue.id, nextStatus);
           },
         );
       },

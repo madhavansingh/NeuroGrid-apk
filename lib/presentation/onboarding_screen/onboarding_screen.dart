@@ -35,7 +35,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   final Set<String> _selectedPrefs = {};
 
   late AnimationController _pageAnimController;
-  late Animation<double> _pageAnim;
 
   @override
   void initState() {
@@ -43,10 +42,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _pageAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
-    );
-    _pageAnim = CurvedAnimation(
-      parent: _pageAnimController,
-      curve: Curves.easeOutCubic,
     );
     _pageAnimController.forward();
   }
@@ -131,12 +126,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   // ─── PAGE 1: WELCOME ────────────────────────────────────────────────────────
   Widget _buildWelcomePage() {
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 6.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(height: 8.h),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 6.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 5.h),
             // Illustration area
             Center(
               child: Container(
@@ -258,11 +256,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 height: 1.55,
               ),
             ),
-            const Spacer(),
-            _buildPrimaryButton(label: 'Continue', onTap: () => _goToPage(1)),
-            SizedBox(height: 4.h),
-          ],
-        ),
+                  SizedBox(height: 3.h),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(6.w, 0, 6.w, 4.h),
+            child: _buildPrimaryButton(label: 'Continue', onTap: () => _goToPage(1)),
+          ),
+        ],
       ),
     );
   }
@@ -306,12 +309,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   // ─── PAGE 2: GOOGLE LOGIN ────────────────────────────────────────────────────
   Widget _buildGoogleLoginPage() {
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 6.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(height: 8.h),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 6.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 5.h),
             Center(
               child: Container(
                 width: 20.w,
@@ -494,12 +500,18 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ),
               ),
             ],
-            const Spacer(),
-            if (_googleLoggedIn)
-              _buildPrimaryButton(label: 'Continue', onTap: () => _goToPage(2)),
-            SizedBox(height: 4.h),
-          ],
-        ),
+                  SizedBox(height: 3.h),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(6.w, 0, 6.w, 4.h),
+            child: _googleLoggedIn
+                ? _buildPrimaryButton(label: 'Continue', onTap: () => _goToPage(2))
+                : const SizedBox.shrink(),
+          ),
+        ],
       ),
     );
   }
@@ -507,12 +519,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   // ─── PAGE 3: LOCATION ────────────────────────────────────────────────────────
   Widget _buildLocationPage() {
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 6.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(height: 8.h),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 6.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 5.h),
             Center(
               child: Container(
                 width: 20.w,
@@ -706,30 +721,34 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 subtitle: 'Incidents and events nearby',
               ),
             ],
-            const Spacer(),
-            if (!_locationGranted)
-              _buildPrimaryButton(
-                label: _isLocationLoading ? 'Detecting...' : 'Allow Location',
-                isLoading: _isLocationLoading,
-                onTap: _isLocationLoading
-                    ? null
-                    : () async {
-                        setState(() => _isLocationLoading = true);
-                        await Future.delayed(
-                          const Duration(milliseconds: 1800),
-                        );
-                        if (!mounted) return;
-                        setState(() {
-                          _isLocationLoading = false;
-                          _locationGranted = true;
-                        });
-                      },
-              )
-            else
-              _buildPrimaryButton(label: 'Continue', onTap: () => _goToPage(3)),
-            SizedBox(height: 4.h),
-          ],
-        ),
+                  SizedBox(height: 3.h),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(6.w, 0, 6.w, 4.h),
+            child: !_locationGranted
+                ? _buildPrimaryButton(
+                    label: _isLocationLoading ? 'Detecting...' : 'Allow Location',
+                    isLoading: _isLocationLoading,
+                    onTap: _isLocationLoading
+                        ? null
+                        : () async {
+                            setState(() => _isLocationLoading = true);
+                            await Future.delayed(
+                              const Duration(milliseconds: 1800),
+                            );
+                            if (!mounted) return;
+                            setState(() {
+                              _isLocationLoading = false;
+                              _locationGranted = true;
+                            });
+                          },
+                  )
+                : _buildPrimaryButton(label: 'Continue', onTap: () => _goToPage(3)),
+          ),
+        ],
       ),
     );
   }
@@ -785,12 +804,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   // ─── PAGE 4: PREFERENCES ─────────────────────────────────────────────────────
   Widget _buildPreferencesPage() {
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 6.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(height: 8.h),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 6.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 5.h),
             Center(
               child: Container(
                 width: 20.w,
@@ -925,28 +947,33 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   fontWeight: FontWeight.w500,
                 ),
               ),
-            const Spacer(),
-            _buildPrimaryButton(
+                  SizedBox(height: 3.h),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(6.w, 0, 6.w, 0),
+            child: _buildPrimaryButton(
               label: 'Continue',
               onTap: _selectedPrefs.isEmpty ? null : () => _goToPage(4),
             ),
-            SizedBox(height: 1.5.h),
-            Center(
-              child: TextButton(
-                onPressed: () => _goToPage(4),
-                child: Text(
-                  'Skip for now',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 10.5.sp,
-                    color: const Color(0xFF9BA8C0),
-                    fontWeight: FontWeight.w500,
-                  ),
+          ),
+          Center(
+            child: TextButton(
+              onPressed: () => _goToPage(4),
+              child: Text(
+                'Skip for now',
+                style: GoogleFonts.dmSans(
+                  fontSize: 10.5.sp,
+                  color: const Color(0xFF9BA8C0),
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-            SizedBox(height: 2.h),
-          ],
-        ),
+          ),
+          SizedBox(height: 2.h),
+        ],
       ),
     );
   }
@@ -971,12 +998,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   // ─── PAGE 5: FINISH ──────────────────────────────────────────────────────────
   Widget _buildFinishPage() {
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: 6.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(height: 10.h),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 6.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(height: 5.h),
             // Celebration icon
             TweenAnimationBuilder<double>(
               tween: Tween(begin: 0.0, end: 1.0),
@@ -1044,11 +1074,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ),
               ],
             ),
-            const Spacer(),
-            _buildPrimaryButton(label: 'Enter App', onTap: _finishOnboarding),
-            SizedBox(height: 4.h),
-          ],
-        ),
+                  SizedBox(height: 3.h),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(6.w, 0, 6.w, 4.h),
+            child: _buildPrimaryButton(label: 'Enter App', onTap: _finishOnboarding),
+          ),
+        ],
       ),
     );
   }

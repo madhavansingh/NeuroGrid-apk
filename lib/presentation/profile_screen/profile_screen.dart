@@ -1,20 +1,26 @@
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_export.dart';
+import '../../providers/city_state_provider.dart';
+import '../../providers/issues_provider.dart';
+import '../../routes/app_routes.dart';
+import '../../services/ws_service.dart';
 import './widgets/account_info_widget.dart';
 import './widgets/notification_toggles_widget.dart';
 import './widgets/preferences_widget.dart';
 import './widgets/saved_locations_widget.dart';
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen>
+class _ProfileScreenState extends ConsumerState<ProfileScreen>
     with TickerProviderStateMixin {
   int _navIndex = 4;
   late AnimationController _entranceController;
@@ -282,12 +288,92 @@ class _ProfileScreenState extends State<ProfileScreen>
             icon: Icons.logout_rounded,
             label: 'Sign Out',
             color: AppTheme.error,
-            onTap: () {},
+            onTap: _confirmSignOut,
             isLast: true,
           ),
         ],
       ),
     );
+  }
+
+  // ── Sign-out logic ──────────────────────────────────────────────────────────
+
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(
+          'Sign Out',
+          style: GoogleFonts.dmSans(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to sign out?',
+          style: GoogleFonts.dmSans(
+            fontSize: 14,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.dmSans(
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Sign Out',
+              style: GoogleFonts.dmSans(
+                fontWeight: FontWeight.w700,
+                color: AppTheme.error,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _performSignOut();
+    }
+  }
+
+  Future<void> _performSignOut() async {
+    // 1. Clear the onboarding/session flags so the full flow shows on next launch
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('has_onboarded');
+    await prefs.remove('has_logged_in');
+
+    // 2. Disconnect WebSocket — stops all live event streams
+    WsService.instance.disconnect();
+
+    // 3. Invalidate Riverpod providers — clears all cached data
+    ref.invalidate(issuesProvider);
+    ref.invalidate(cityStateProvider);
+    ref.invalidate(citySummaryProvider);
+
+    // 4. Navigate to splash screen and wipe the entire back stack
+    //    User cannot press Back to re-enter the app
+    if (mounted) {
+      await Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRoutes.splashScreen,
+        (route) => false,
+      );
+    }
   }
 }
 

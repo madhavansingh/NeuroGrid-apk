@@ -1,8 +1,7 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
-
+/// CivicIssue model — shared across the app.
+///
+/// Supabase has been fully removed. All data now flows through
+/// [ApiService] (REST) and [WsService] (WebSocket).
 class CivicIssue {
   final String id;
   final String? userId;
@@ -17,7 +16,7 @@ class CivicIssue {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  CivicIssue({
+  const CivicIssue({
     required this.id,
     this.userId,
     required this.title,
@@ -49,22 +48,20 @@ class CivicIssue {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'user_id': userId,
-      'title': title,
-      'description': description,
-      'issue_type': issueType,
-      'image_url': imageUrl,
-      'latitude': latitude,
-      'longitude': longitude,
-      'location_name': locationName,
-      'status': status,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'user_id': userId,
+        'title': title,
+        'description': description,
+        'issue_type': issueType,
+        'image_url': imageUrl,
+        'latitude': latitude,
+        'longitude': longitude,
+        'location_name': locationName,
+        'status': status,
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': updatedAt.toIso8601String(),
+      };
 
   CivicIssue copyWith({
     String? id,
@@ -94,161 +91,5 @@ class CivicIssue {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
-  }
-}
-
-class CivicIssuesService {
-  static CivicIssuesService? _instance;
-  static CivicIssuesService get instance =>
-      _instance ??= CivicIssuesService._();
-  CivicIssuesService._();
-
-  SupabaseClient get _client => Supabase.instance.client;
-  static const String _bucketName = 'issue-images';
-
-  /// Fetch all issues ordered by newest first
-  Future<List<CivicIssue>> fetchIssues({String? statusFilter}) async {
-    try {
-      var query = _client.from('issues').select();
-      if (statusFilter != null && statusFilter.isNotEmpty) {
-        query = query.eq('status', statusFilter);
-      }
-      final data = await query.order('created_at', ascending: false);
-      return (data as List).map((e) => CivicIssue.fromJson(e)).toList();
-    } catch (e) {
-      return [];
-    }
-  }
-
-  /// Upload image to Supabase Storage and return public URL
-  Future<String?> uploadImage(dynamic imageFile) async {
-    try {
-      const uuid = Uuid();
-      final fileName = '${uuid.v4()}.jpg';
-      final path = 'issues/$fileName';
-
-      if (kIsWeb) {
-        // imageFile is Uint8List on web
-        final bytes = imageFile as Uint8List;
-        await _client.storage
-            .from(_bucketName)
-            .uploadBinary(
-              path,
-              bytes,
-              fileOptions: const FileOptions(
-                contentType: 'image/jpeg',
-                upsert: true,
-              ),
-            );
-      } else {
-        // imageFile is File on mobile
-        final file = imageFile as File;
-        await _client.storage
-            .from(_bucketName)
-            .upload(
-              path,
-              file,
-              fileOptions: const FileOptions(
-                contentType: 'image/jpeg',
-                upsert: true,
-              ),
-            );
-      }
-
-      final publicUrl = _client.storage.from(_bucketName).getPublicUrl(path);
-      return publicUrl;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// Submit a new civic issue
-  Future<CivicIssue?> submitIssue({
-    required String title,
-    required String description,
-    required String issueType,
-    String? imageUrl,
-    double? latitude,
-    double? longitude,
-    String? locationName,
-  }) async {
-    try {
-      final user = _client.auth.currentUser;
-      final data = await _client
-          .from('issues')
-          .insert({
-            'user_id': user?.id,
-            'title': title,
-            'description': description,
-            'issue_type': issueType,
-            'image_url': imageUrl,
-            'latitude': latitude,
-            'longitude': longitude,
-            'location_name': locationName,
-            'status': 'pending',
-          })
-          .select()
-          .single();
-      return CivicIssue.fromJson(data);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// Update issue status (simulate operator action)
-  Future<bool> updateIssueStatus(String issueId, String newStatus) async {
-    try {
-      await _client
-          .from('issues')
-          .update({'status': newStatus})
-          .eq('id', issueId);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  /// Subscribe to real-time issue changes
-  RealtimeChannel subscribeToIssues({
-    required void Function(CivicIssue issue, String eventType) onEvent,
-  }) {
-    return _client
-        .channel('public:issues')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'issues',
-          callback: (payload) {
-            try {
-              final record = payload.eventType == PostgresChangeEvent.delete
-                  ? payload.oldRecord
-                  : payload.newRecord;
-              if (record.isNotEmpty) {
-                final issue = CivicIssue.fromJson(record);
-                onEvent(issue, payload.eventType.name);
-              }
-            } catch (_) {}
-          },
-        )
-        .subscribe();
-  }
-
-  /// Simulate operator progression: pending → in_progress → resolved
-  Future<void> simulateOperatorUpdate(
-    String issueId,
-    String currentStatus,
-  ) async {
-    String nextStatus;
-    switch (currentStatus) {
-      case 'pending':
-        nextStatus = 'in_progress';
-        break;
-      case 'in_progress':
-        nextStatus = 'resolved';
-        break;
-      default:
-        return;
-    }
-    await updateIssueStatus(issueId, nextStatus);
   }
 }

@@ -137,8 +137,9 @@ class WeatherService {
 
   Future<WeatherData> fetchWeather() async {
     const envKey = String.fromEnvironment('OPENWEATHER_API_KEY');
-    // Fallback to the key provided in env.json (used when dart-define is unavailable)
-    const fallbackKey = 'a3f59e7f34284fd62825b68a5cd3e5e2';
+    // Set OPENWEATHER_API_KEY in env.json (see env.json.example)
+    // or pass via: flutter run --dart-define=OPENWEATHER_API_KEY=your_key
+    const fallbackKey = '';
     final apiKey = envKey.isNotEmpty ? envKey : fallbackKey;
 
     if (apiKey.isEmpty) {

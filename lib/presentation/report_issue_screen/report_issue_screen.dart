@@ -1,21 +1,21 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import '../../providers/issues_provider.dart';
 import '../../theme/app_theme.dart';
-import '../../services/civic_issues_service.dart';
 
-class ReportIssueScreen extends StatefulWidget {
+class ReportIssueScreen extends ConsumerStatefulWidget {
   const ReportIssueScreen({super.key});
 
   @override
-  State<ReportIssueScreen> createState() => _ReportIssueScreenState();
+  ConsumerState<ReportIssueScreen> createState() => _ReportIssueScreenState();
 }
 
-class _ReportIssueScreenState extends State<ReportIssueScreen> {
+class _ReportIssueScreenState extends ConsumerState<ReportIssueScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -63,67 +63,52 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
     super.dispose();
   }
 
+  // ── Location ───────────────────────────────────────────────────────────────
+
   Future<void> _fetchLocation() async {
     setState(() => _isFetchingLocation = true);
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        setState(() {
-          _locationName = 'Bhopal, Madhya Pradesh';
-          _latitude = 23.2599;
-          _longitude = 77.4126;
-          _isFetchingLocation = false;
-        });
+        _setDefaultLocation();
         return;
       }
-
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        setState(() {
-          _locationName = 'Bhopal, Madhya Pradesh';
-          _latitude = 23.2599;
-          _longitude = 77.4126;
-          _isFetchingLocation = false;
-        });
+        _setDefaultLocation();
         return;
       }
-
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.medium,
           timeLimit: Duration(seconds: 10),
         ),
       );
-
-      // Use Bhopal area location names based on coordinates
-      final locationName = _getBhopalAreaName(
-        position.latitude,
-        position.longitude,
-      );
-
       setState(() {
         _latitude = position.latitude;
         _longitude = position.longitude;
-        _locationName = locationName;
+        _locationName = _getBhopalAreaName(position.latitude, position.longitude);
         _isFetchingLocation = false;
       });
-    } catch (e) {
-      setState(() {
-        _locationName = 'Bhopal, Madhya Pradesh';
-        _latitude = 23.2599;
-        _longitude = 77.4126;
-        _isFetchingLocation = false;
-      });
+    } catch (_) {
+      _setDefaultLocation();
     }
   }
 
+  void _setDefaultLocation() {
+    setState(() {
+      _locationName = 'Bhopal, Madhya Pradesh';
+      _latitude = 23.2599;
+      _longitude = 77.4126;
+      _isFetchingLocation = false;
+    });
+  }
+
   String _getBhopalAreaName(double lat, double lng) {
-    // Map coordinates to Bhopal area names
     if (lat >= 23.28 && lat <= 23.32 && lng >= 77.40 && lng <= 77.45) {
       return 'New Market, Bhopal';
     } else if (lat >= 23.24 && lat <= 23.28 && lng >= 77.42 && lng <= 77.46) {
@@ -138,6 +123,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       return 'Bhopal, Madhya Pradesh';
     }
   }
+
+  // ── Image picking ──────────────────────────────────────────────────────────
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -171,38 +158,40 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
     }
   }
 
+  // ── Submit — now POSTs to FastAPI via issuesProvider ──────────────────────
+
   Future<void> _submitIssue() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isSubmitting = true);
 
     try {
+      // Image upload: backend-specific logic (multipart or base64) goes here.
+      // For now we skip uploading and send null imageUrl, preserving the
+      // existing UI flow. Replace this section once your backend has
+      // POST /api/v1/uploads ready.
       String? imageUrl;
-
-      // Upload image if selected
       if (_pickedImage != null && _imageBytes != null) {
-        if (kIsWeb) {
-          imageUrl = await CivicIssuesService.instance.uploadImage(
-            _imageBytes!,
-          );
-        } else {
-          imageUrl = await CivicIssuesService.instance.uploadImage(
-            File(_pickedImage!.path),
-          );
-        }
+        // TODO: implement multipart upload to your backend endpoint
+        // imageUrl = await YourUploadService.upload(_imageBytes!);
+        debugPrint(
+          '[ReportIssue] Image selected but upload endpoint not yet wired — skipping.',
+        );
       }
 
-      final issue = await CivicIssuesService.instance.submitIssue(
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim(),
-        issueType: _selectedIssueType,
-        imageUrl: imageUrl,
-        latitude: _latitude,
-        longitude: _longitude,
-        locationName: _locationName.isNotEmpty ? _locationName : null,
-      );
+      final issue = await ref.read(issuesProvider.notifier).submitIssue(
+            title: _titleController.text.trim(),
+            description: _descriptionController.text.trim(),
+            issueType: _selectedIssueType,
+            imageUrl: imageUrl,
+            latitude: _latitude,
+            longitude: _longitude,
+            locationName:
+                _locationName.isNotEmpty ? _locationName : null,
+          );
 
-      if (issue != null && mounted) {
+      if (!mounted) return;
+
+      if (issue != null) {
         Fluttertoast.showToast(
           msg: 'Issue reported successfully!',
           backgroundColor: AppTheme.success,
@@ -211,21 +200,25 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         Navigator.pop(context);
       } else {
         Fluttertoast.showToast(
-          msg: 'Failed to submit. Please try again.',
+          msg: 'Failed to submit. Check your connection and try again.',
           backgroundColor: AppTheme.error,
           textColor: Colors.white,
         );
       }
     } catch (e) {
-      Fluttertoast.showToast(
-        msg: 'Something went wrong. Please try again.',
-        backgroundColor: AppTheme.error,
-        textColor: Colors.white,
-      );
+      if (mounted) {
+        Fluttertoast.showToast(
+          msg: 'Something went wrong. Please try again.',
+          backgroundColor: AppTheme.error,
+          textColor: Colors.white,
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -335,7 +328,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       children: _issueTypes.map((type) {
         final isSelected = _selectedIssueType == type['value'];
         return GestureDetector(
-          onTap: () => setState(() => _selectedIssueType = type['value']),
+          onTap: () => setState(() => _selectedIssueType = type['value'] as String),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -389,20 +382,14 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         style: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.textPrimary),
         decoration: InputDecoration(
           hintText: 'e.g. Pothole on main road',
-          hintStyle: GoogleFonts.dmSans(
-            fontSize: 14,
-            color: AppTheme.textMuted,
-          ),
+          hintStyle: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.textMuted),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none,
           ),
           filled: true,
           fillColor: AppTheme.surface,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
         validator: (v) =>
             (v == null || v.trim().isEmpty) ? 'Title is required' : null,
@@ -429,20 +416,14 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         style: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.textPrimary),
         decoration: InputDecoration(
           hintText: 'Describe the issue in detail...',
-          hintStyle: GoogleFonts.dmSans(
-            fontSize: 14,
-            color: AppTheme.textMuted,
-          ),
+          hintStyle: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.textMuted),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none,
           ),
           filled: true,
           fillColor: AppTheme.surface,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
     );
@@ -524,7 +505,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
         decoration: BoxDecoration(
           color: AppTheme.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.outline, style: BorderStyle.solid),
+          border: Border.all(color: AppTheme.outline),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -591,8 +572,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                   _isFetchingLocation
                       ? 'Fetching location...'
                       : _locationName.isNotEmpty
-                      ? _locationName
-                      : 'Location unavailable',
+                          ? _locationName
+                          : 'Location unavailable',
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,

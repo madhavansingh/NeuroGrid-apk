@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../../core/services/weather_service.dart';
+import '../../../providers/city_state_provider.dart';
 
-class QuickInsightsWidget extends StatefulWidget {
+/// Quick Insights row on the home screen.
+/// - Traffic card: live from [cityStateProvider] → /api/v1/city/state
+/// - Weather card: unchanged, still uses [WeatherService]
+/// - Alerts card: badge count from city state alert list + weather alert
+class QuickInsightsWidget extends ConsumerStatefulWidget {
   const QuickInsightsWidget({super.key});
 
   @override
-  State<QuickInsightsWidget> createState() => _QuickInsightsWidgetState();
+  ConsumerState<QuickInsightsWidget> createState() =>
+      _QuickInsightsWidgetState();
 }
 
-class _QuickInsightsWidgetState extends State<QuickInsightsWidget> {
+class _QuickInsightsWidgetState extends ConsumerState<QuickInsightsWidget> {
   final WeatherService _weatherService = WeatherService();
   WeatherData? _weatherData;
-  bool _isLoading = true;
+  bool _weatherLoading = true;
 
   @override
   void initState() {
@@ -26,83 +33,47 @@ class _QuickInsightsWidgetState extends State<QuickInsightsWidget> {
     if (mounted) {
       setState(() {
         _weatherData = data;
-        _isLoading = false;
+        _weatherLoading = false;
       });
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final weather = _weatherData;
+  // ── Traffic helpers ────────────────────────────────────────────────────────
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Quick Insights',
-          style: GoogleFonts.dmSans(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _InsightCard(
-                icon: Icons.directions_car_rounded,
-                label: 'Traffic',
-                value: 'Heavy',
-                subtitle: 'Hamidia Rd',
-                iconBg: AppTheme.trafficHeavyLight,
-                iconColor: AppTheme.trafficHeavy,
-                valueColor: AppTheme.trafficHeavy,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _isLoading
-                  ? _InsightCardSkeleton()
-                  : _InsightCard(
-                      icon: _weatherIcon(weather?.condition ?? 'Clear'),
-                      label: 'Weather',
-                      value: weather?.conditionLabel ?? 'Clear',
-                      subtitle: weather?.insightSubtitle ?? '—',
-                      iconBg: const Color(0xFFEFF6FF),
-                      iconColor: _weatherIconColor(
-                        weather?.condition ?? 'Clear',
-                      ),
-                      valueColor: _weatherValueColor(
-                        weather?.condition ?? 'Clear',
-                      ),
-                    ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _InsightCard(
-                icon: Icons.warning_amber_rounded,
-                label: 'Alerts',
-                value: (weather?.hasAlert == true) ? '1+' : '0',
-                subtitle: (weather?.hasAlert == true)
-                    ? 'Weather alert'
-                    : 'All clear',
-                iconBg: (weather?.hasAlert == true)
-                    ? AppTheme.warningLight
-                    : const Color(0xFFECFDF5),
-                iconColor: (weather?.hasAlert == true)
-                    ? AppTheme.warning
-                    : const Color(0xFF10B981),
-                valueColor: (weather?.hasAlert == true)
-                    ? AppTheme.warning
-                    : const Color(0xFF059669),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
+  String _trafficValue(String status) {
+    switch (status.toLowerCase()) {
+      case 'heavy':
+        return 'Heavy';
+      case 'moderate':
+        return 'Moderate';
+      default:
+        return 'Smooth';
+    }
   }
+
+  Color _trafficIconBg(String status) {
+    switch (status.toLowerCase()) {
+      case 'heavy':
+        return AppTheme.trafficHeavyLight;
+      case 'moderate':
+        return AppTheme.warningLight;
+      default:
+        return const Color(0xFFECFDF5);
+    }
+  }
+
+  Color _trafficIconColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'heavy':
+        return AppTheme.trafficHeavy;
+      case 'moderate':
+        return AppTheme.warning;
+      default:
+        return const Color(0xFF10B981);
+    }
+  }
+
+  // ── Weather helpers (unchanged) ────────────────────────────────────────────
 
   IconData _weatherIcon(String condition) {
     switch (condition.toLowerCase()) {
@@ -158,7 +129,121 @@ class _QuickInsightsWidgetState extends State<QuickInsightsWidget> {
         return const Color(0xFF2563EB);
     }
   }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final cityAsync = ref.watch(cityStateProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Quick Insights',
+          style: GoogleFonts.dmSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            // ── Traffic card — live from backend ──────────────────────────
+            Expanded(
+              child: cityAsync.when(
+                loading: () => _InsightCardSkeleton(),
+                error: (_, __) => _InsightCard(
+                  icon: Icons.directions_car_rounded,
+                  label: 'Traffic',
+                  value: '—',
+                  subtitle: 'Unavailable',
+                  iconBg: AppTheme.trafficHeavyLight,
+                  iconColor: AppTheme.trafficHeavy,
+                  valueColor: AppTheme.trafficHeavy,
+                ),
+                data: (cityState) {
+                  final traffic = cityState?.traffic;
+                  final status = traffic?.status ?? 'smooth';
+                  return _InsightCard(
+                    icon: Icons.directions_car_rounded,
+                    label: 'Traffic',
+                    value: _trafficValue(status),
+                    subtitle: traffic?.hotspot.isNotEmpty == true
+                        ? traffic!.hotspot
+                        : 'City-wide',
+                    iconBg: _trafficIconBg(status),
+                    iconColor: _trafficIconColor(status),
+                    valueColor: _trafficIconColor(status),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // ── Weather card — unchanged ──────────────────────────────────
+            Expanded(
+              child: _weatherLoading
+                  ? _InsightCardSkeleton()
+                  : _InsightCard(
+                      icon: _weatherIcon(
+                        _weatherData?.condition ?? 'Clear',
+                      ),
+                      label: 'Weather',
+                      value: _weatherData?.conditionLabel ?? 'Clear',
+                      subtitle: _weatherData?.insightSubtitle ?? '—',
+                      iconBg: const Color(0xFFEFF6FF),
+                      iconColor: _weatherIconColor(
+                        _weatherData?.condition ?? 'Clear',
+                      ),
+                      valueColor: _weatherValueColor(
+                        _weatherData?.condition ?? 'Clear',
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 10),
+
+            // ── Alerts card — combines city + weather alerts ───────────────
+            Expanded(
+              child: cityAsync.when(
+                loading: () => _InsightCardSkeleton(),
+                error: (_, __) => _buildAlertsCard(
+                  count: 0,
+                  weatherAlert: _weatherData?.hasAlert ?? false,
+                ),
+                data: (cityState) => _buildAlertsCard(
+                  count: cityState?.alerts.length ?? 0,
+                  weatherAlert: _weatherData?.hasAlert ?? false,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAlertsCard({required int count, required bool weatherAlert}) {
+    final totalAlerts = count + (weatherAlert ? 1 : 0);
+    final hasAlerts = totalAlerts > 0;
+    return _InsightCard(
+      icon: Icons.warning_amber_rounded,
+      label: 'Alerts',
+      value: hasAlerts ? '$totalAlerts' : '0',
+      subtitle: hasAlerts
+          ? weatherAlert
+              ? 'Weather + City'
+              : 'City alerts'
+          : 'All clear',
+      iconBg: hasAlerts ? AppTheme.warningLight : const Color(0xFFECFDF5),
+      iconColor: hasAlerts ? AppTheme.warning : const Color(0xFF10B981),
+      valueColor: hasAlerts ? AppTheme.warning : const Color(0xFF059669),
+    );
+  }
 }
+
+// ── Skeleton ───────────────────────────────────────────────────────────────────
 
 class _InsightCardSkeleton extends StatelessWidget {
   @override
@@ -210,6 +295,8 @@ class _InsightCardSkeleton extends StatelessWidget {
     );
   }
 }
+
+// ── Insight card ───────────────────────────────────────────────────────────────
 
 class _InsightCard extends StatelessWidget {
   final IconData icon;

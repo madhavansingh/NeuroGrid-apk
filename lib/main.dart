@@ -4,17 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/app_export.dart';
 import '../widgets/custom_error_widget.dart';
 import './routes/app_routes.dart';
-import './services/supabase_service.dart';
+import './services/ws_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase
-  try {
-    await SupabaseService.initialize();
-  } catch (e) {
-    debugPrint('Failed to initialize Supabase: $e');
-  }
+  // Start WebSocket connection early so data is ready when screens load.
+  // Providers (cityStateProvider, issuesProvider) will also call connect(),
+  // which is a no-op when already connected.
+  WsService.instance.connect();
 
   bool hasShownError = false;
 
