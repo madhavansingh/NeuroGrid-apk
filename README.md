@@ -360,10 +360,4 @@ The backend serves:
 
 ## 📄 License
 
-MIT © 2025 Madhavan Singh
-
----
-
-<div align="center">
-Built with ❤️ using Flutter, Gemini AI & FastAPI
-</div>
+MIT © 2025 NeuroGrid Team
