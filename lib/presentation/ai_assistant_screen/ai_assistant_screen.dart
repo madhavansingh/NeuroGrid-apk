@@ -1,17 +1,19 @@
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/app_export.dart';
+import '../../providers/chat_notifier.dart';
 import '../../routes/app_routes.dart';
 
-class AiAssistantScreen extends StatefulWidget {
+class AiAssistantScreen extends ConsumerStatefulWidget {
   const AiAssistantScreen({super.key});
 
   @override
-  State<AiAssistantScreen> createState() => _AiAssistantScreenState();
+  ConsumerState<AiAssistantScreen> createState() => _AiAssistantScreenState();
 }
 
-class _AiAssistantScreenState extends State<AiAssistantScreen>
+class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
     with TickerProviderStateMixin {
   int _navIndex = 3;
   final TextEditingController _inputController = TextEditingController();
@@ -51,11 +53,30 @@ class _AiAssistantScreenState extends State<AiAssistantScreen>
     ),
   ];
 
+  static const _config = ChatConfig(
+    provider: 'GEMINI',
+    model: 'gemini/gemini-2.0-flash',
+    streaming: false,
+  );
+
+  static const String _systemPrompt =
+      'You are NeuroGrid AI, the intelligent city assistant for Bhopal, '
+      'Madhya Pradesh, India. You have access to real-time city data including '
+      'traffic conditions, parking availability, waste pickup schedules, weather, '
+      'civic issue status, and city infrastructure metrics. '
+      'Always give concise, actionable, data-driven answers. '
+      'If asked about conditions, mention specific Bhopal landmarks and roads '
+      '(e.g., MP Nagar, Hamidia Road, DB City Mall, New Market). '
+      'Keep responses under 80 words unless a detailed explanation is required.';
+
+  // Conversation history (sent to AI for context)
+  final List<Map<String, dynamic>> _history = [];
+
   final List<String> _suggestions = [
     'Best route to New Market?',
     'Air quality today',
     'Waste pickup schedule',
-    'Energy usage in my area',
+    'Parking near DB City Mall',
   ];
 
   @override
@@ -88,30 +109,54 @@ class _AiAssistantScreenState extends State<AiAssistantScreen>
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
 
+    final userMessage = _ChatMessage(
+      text: text,
+      isUser: true,
+      time: _currentTime(),
+    );
+
     setState(() {
-      _messages.add(
-        _ChatMessage(text: text, isUser: true, time: _currentTime()),
-      );
+      _messages.add(userMessage);
       _inputController.clear();
       _isTyping = true;
     });
-
     _scrollToBottom();
 
-    Future.delayed(const Duration(milliseconds: 1500), () {
+    // Add to history for context
+    _history.add({'role': 'user', 'content': text});
+
+    // Build full message list with system prompt
+    final apiMessages = [
+      {'role': 'system', 'content': _systemPrompt},
+      ..._history,
+    ];
+
+    ref
+        .read(chatNotifierProvider(_config).notifier)
+        .sendMessage(apiMessages)
+        .then((_) {
       if (!mounted) return;
+      final chatState = ref.read(chatNotifierProvider(_config));
+      final reply = chatState.response.isNotEmpty
+          ? chatState.response
+          : (chatState.error != null
+              ? 'Sorry, I could not reach the AI service. '
+                'Please check your API key in env.json.'
+              : 'No response received.');
+
+      // Add AI reply to history for multi-turn context
+      _history.add({'role': 'assistant', 'content': reply});
+
       setState(() {
         _isTyping = false;
         _messages.add(
-          _ChatMessage(
-            text:
-                'I\'m analyzing city data for your query. Based on current conditions in Bhopal, here\'s what I found: conditions are normal across most zones. Updated 5 sec ago.',
-            isUser: false,
-            time: _currentTime(),
-          ),
+          _ChatMessage(text: reply, isUser: false, time: _currentTime()),
         );
       });
       _scrollToBottom();
+
+      // Reset the notifier so it's fresh for next message
+      ref.read(chatNotifierProvider(_config).notifier).clearResponse();
     });
   }
 

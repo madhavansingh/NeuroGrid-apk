@@ -1,17 +1,38 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../ai_client.dart';
+import 'direct_ai_service.dart' as direct;
 
 const String _chatCompletionEndpoint = String.fromEnvironment(
   'AWS_LAMBDA_CHAT_COMPLETION_URL',
 );
 
+/// Returns the assistant reply as a plain string.
+///
+/// Routing priority:
+///   1. AWS Lambda proxy  (AWS_LAMBDA_CHAT_COMPLETION_URL is set)
+///   2. Gemini direct     (GEMINI_API_KEY is set)
+///   3. OpenAI direct     (OPENAI_API_KEY is set)
 Future<Map<String, dynamic>> getChatCompletion(
   String provider,
   String model,
   List<Map<String, dynamic>> messages, {
   Map<String, dynamic> parameters = const {},
 }) async {
+  // ── Fast-path: direct API when no Lambda is configured ──────────────────
+  if (_chatCompletionEndpoint.isEmpty && direct.hasDirectAiKey) {
+    final text = await direct.sendDirectChatCompletion(messages);
+    // Normalise to OpenAI-compatible shape so callers don't need changes
+    return {
+      'choices': [
+        {
+          'message': {'role': 'assistant', 'content': text},
+        },
+      ],
+    };
+  }
+
+  // ── Lambda proxy path ────────────────────────────────────────────────────
   final payload = {
     'provider': provider,
     'model': model,
@@ -21,6 +42,7 @@ Future<Map<String, dynamic>> getChatCompletion(
   };
   return await callLambdaFunction(_chatCompletionEndpoint, payload);
 }
+
 
 Future<void> getStreamingChatCompletion(
   String provider,
