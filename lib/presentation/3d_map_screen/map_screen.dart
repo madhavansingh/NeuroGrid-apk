@@ -86,7 +86,7 @@ class _AnimatedTrafficPolylineState extends State<_AnimatedTrafficPolyline>
             ),
             Polyline(
               points: widget.segment.points,
-              color: color.withOpacity(pulse),
+              color: color.withValues(alpha: pulse),
               strokeWidth: widget.strokeWidth,
               strokeCap: StrokeCap.round,
               strokeJoin: StrokeJoin.round,
@@ -798,7 +798,7 @@ class _MapScreenState extends State<MapScreen> with TickerProviderStateMixin {
               width: 7,
               height: 7,
               decoration: BoxDecoration(
-                color: const Color(0xFF16A34A).withOpacity(_pulseAnim.value),
+                color: const Color(0xFF16A34A).withValues(alpha: _pulseAnim.value),
                 shape: BoxShape.circle,
               ),
             ),

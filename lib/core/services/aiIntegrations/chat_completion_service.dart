@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../ai_client.dart';
 import 'direct_ai_service.dart' as direct;
 
@@ -87,7 +88,7 @@ Future<void> getStreamingChatCompletion(
             } else if (data['type'] == 'done') {
               onComplete();
             } else if (data['type'] == 'error') {
-              print(
+              debugPrint(
                 'Lambda Function Error: ${data['error']}, details: ${data['details']}',
               );
               onError(Exception(data['error']));
@@ -97,7 +98,7 @@ Future<void> getStreamingChatCompletion(
       }
     }
   } catch (error) {
-    print('Streaming error: $error');
+    debugPrint('Streaming error: $error');
     onError(error is Exception ? error : Exception(error.toString()));
   }
 }
