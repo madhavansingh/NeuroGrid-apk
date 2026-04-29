@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -514,58 +515,84 @@ class _TrafficScreenState extends State<TrafficScreen>
   // ── Search bar ────────────────────────────────────────────────────────────
 
   Widget _buildSearchBar() {
-    return Container(
-      height: 52,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(28),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          height: 54,
+          decoration: BoxDecoration(
+            color: Colors.white.withAlpha(230),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withAlpha(200), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1A6BF5).withAlpha(18),
+                blurRadius: 24,
+                offset: const Offset(0, 6),
+              ),
+              BoxShadow(
+                color: Colors.black.withAlpha(14),
+                blurRadius: 12,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 16),
-          Icon(Icons.search_rounded, size: 20, color: AppTheme.textMuted),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              onSubmitted: _onSearchSubmit,
-              style: GoogleFonts.dmSans(
-                fontSize: 14,
-                color: AppTheme.textPrimary,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Search destination in Bhopal…',
-                hintStyle: GoogleFonts.dmSans(
-                  fontSize: 14,
-                  color: AppTheme.textMuted,
+          child: Row(
+            children: [
+              const SizedBox(width: 16),
+              Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1A6BF5), Color(0xFF4A8FFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                border: InputBorder.none,
-                isDense: true,
+                child: const Icon(Icons.search_rounded, size: 17, color: Colors.white),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  onSubmitted: _onSearchSubmit,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Search destination in Bhopal…',
+                    hintStyle: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      color: AppTheme.textMuted,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                ),
+              ),
+              if (_showRouteResult)
+                GestureDetector(
+                  onTap: _clearRoute,
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 12),
+                    width: 28, height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.close_rounded, size: 16,
+                        color: Color(0xFF64748B)),
+                  ),
+                )
+              else
+                const SizedBox(width: 14),
+            ],
           ),
-          if (_showRouteResult)
-            GestureDetector(
-              onTap: _clearRoute,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: Icon(
-                  Icons.close_rounded,
-                  size: 18,
-                  color: AppTheme.textMuted,
-                ),
-              ),
-            )
-          else
-            const SizedBox(width: 12),
-        ],
+        ),
       ),
     );
   }
@@ -573,42 +600,69 @@ class _TrafficScreenState extends State<TrafficScreen>
   // ── Live badge ────────────────────────────────────────────────────────────
 
   Widget _buildLiveBadge() {
+    final heavyCount = _segments
+        .where((s) => s.status == TrafficStatus.heavy)
+        .length;
+    final modCount = _segments
+        .where((s) => s.status == TrafficStatus.moderate)
+        .length;
+    final Color dotColor = heavyCount >= 2
+        ? const Color(0xFFDC2626)
+        : modCount >= 2
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFF16A34A);
+
     return AnimatedBuilder(
       animation: _pulseAnim,
-      builder: (_, __) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-        decoration: BoxDecoration(
-          color: Colors.white.withAlpha(235),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(18),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+      builder: (_, __) => ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(230),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withAlpha(180), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: dotColor.withAlpha(30),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                color: const Color(0xFF16A34A).withOpacity(_pulseAnim.value),
-                shape: BoxShape.circle,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Pulsing dot
+                Container(
+                  width: 8, height: 8,
+                  decoration: BoxDecoration(
+                    color: dotColor.withOpacity(0.5 + 0.5 * _pulseAnim.value),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: dotColor.withAlpha(80),
+                        blurRadius: 6,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  'LIVE  ·  $_updateLabel',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF0F172A),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 6),
-            Text(
-              _updateLabel,
-              style: GoogleFonts.dmSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -689,41 +743,69 @@ class _TrafficScreenState extends State<TrafficScreen>
     ScrollController scrollController,
     double bottomPad,
   ) {
+    final heavyCount = _segments
+        .where((s) => s.status == TrafficStatus.heavy)
+        .length;
+    final modCount = _segments
+        .where((s) => s.status == TrafficStatus.moderate)
+        .length;
+    final List<Color> stripGradient = heavyCount >= 2
+        ? [const Color(0xFFDC2626), const Color(0xFFFF6B6B)]
+        : modCount >= 2
+            ? [const Color(0xFFF59E0B), const Color(0xFFFBBF24)]
+            : [const Color(0xFF10B981), const Color(0xFF34D399)];
+
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: Color(0x1A000000),
-            blurRadius: 24,
-            offset: Offset(0, -4),
+            color: Colors.black.withAlpha(20),
+            blurRadius: 32,
+            offset: const Offset(0, -6),
           ),
         ],
       ),
-      child: ListView(
-        controller: scrollController,
-        padding: EdgeInsets.only(bottom: bottomPad + 16),
-        children: [
-          // Drag handle
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 14),
-              width: 36,
-              height: 4,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: Column(
+          children: [
+            // Gradient status strip at very top
+            Container(
+              height: 3,
               decoration: BoxDecoration(
-                color: const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(2),
+                gradient: LinearGradient(colors: stripGradient),
               ),
             ),
-          ),
+            Expanded(
+              child: ListView(
+                controller: scrollController,
+                padding: EdgeInsets.only(bottom: bottomPad + 16),
+                children: [
+                  // Drag handle
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 14),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
 
-          if (!_showRouteResult) ...[
-            _buildTrafficSummary(),
-          ] else ...[
-            _buildRouteInfo(),
+                  if (!_showRouteResult) ...[
+                    _buildTrafficSummary(),
+                  ] else ...[
+                    _buildRouteInfo(),
+                  ],
+                ],
+              ),
+            ),
           ],
-        ],
+        ),
       ),
     );
   }

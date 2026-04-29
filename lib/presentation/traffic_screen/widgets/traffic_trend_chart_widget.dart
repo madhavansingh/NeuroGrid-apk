@@ -198,8 +198,7 @@ class _TrafficTrendChartWidgetState extends State<TrafficTrendChartWidget>
                     ),
                     lineTouchData: LineTouchData(
                       touchTooltipData: LineTouchTooltipData(
-                        tooltipBgColor: AppTheme.textPrimary,
-                        tooltipRoundedRadius: 10,
+                        getTooltipColor: (_) => AppTheme.textPrimary,
                         tooltipPadding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 8,
