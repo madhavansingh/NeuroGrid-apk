@@ -64,6 +64,7 @@ class IssuesNotifier extends AsyncNotifier<List<CivicIssue>> {
   }
 
   /// POST a new issue; optimistically prepends it to state.
+  /// Throws on backend/network failure so the UI can show the real error.
   Future<CivicIssue?> submitIssue({
     required String title,
     required String description,
@@ -73,6 +74,7 @@ class IssuesNotifier extends AsyncNotifier<List<CivicIssue>> {
     double? longitude,
     String? locationName,
   }) async {
+    // Let the exception propagate — the screen catches it and shows the message.
     final issue = await ApiService.instance.createIssue(
       title: title,
       description: description,
