@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import '../config/api_config.dart';
 import 'api_client.dart';
 
 // ── Event types ───────────────────────────────────────────────────────────────
@@ -21,10 +23,14 @@ class WsEvent {
   const WsEvent({required this.type, required this.data});
 }
 
+// ── Connection state ──────────────────────────────────────────────────────────
+
+enum WsConnectionState { disconnected, connecting, connected, waking }
+
 // ── WsService singleton ───────────────────────────────────────────────────────
 
-/// Singleton WebSocket service for ws://host/api/v1/ws.
-/// Broadcasts parsed events to all listeners; auto-reconnects on disconnect.
+/// Singleton WebSocket service (wss:// — always secure).
+/// Auto-reconnects with exponential back-off; handles Render cold-start delays.
 class WsService {
   static WsService? _instance;
   static WsService get instance => _instance ??= WsService._();
@@ -34,19 +40,27 @@ class WsService {
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
   bool _intentionalClose = false;
-  bool _connected = false;
+  int _reconnectAttempts = 0;
 
-  final _controller = StreamController<WsEvent>.broadcast();
+  // Public state stream
+  final _stateController =
+      StreamController<WsConnectionState>.broadcast();
+  final _eventController = StreamController<WsEvent>.broadcast();
 
-  Stream<WsEvent> get events => _controller.stream;
-  bool get isConnected => _connected;
+  Stream<WsEvent> get events => _eventController.stream;
+  Stream<WsConnectionState> get connectionState => _stateController.stream;
+  WsConnectionState _state = WsConnectionState.disconnected;
+  WsConnectionState get state => _state;
+  bool get isConnected => _state == WsConnectionState.connected;
 
-  // ── Public API ─────────────────────────────────────────────────────────────
+  // ── Public API ──────────────────────────────────────────────────────────────
 
   /// Connect to the backend WebSocket. Safe to call multiple times.
   void connect() {
-    if (_connected) return;
+    if (_state == WsConnectionState.connected ||
+        _state == WsConnectionState.connecting) return;
     _intentionalClose = false;
+    _reconnectAttempts = 0;
     _doConnect();
   }
 
@@ -54,16 +68,33 @@ class WsService {
   void disconnect() {
     _intentionalClose = true;
     _cleanup();
+    _setState(WsConnectionState.disconnected);
   }
 
-  // ── Internal ───────────────────────────────────────────────────────────────
+  // ── Internal ────────────────────────────────────────────────────────────────
+
+  void _setState(WsConnectionState s) {
+    _state = s;
+    _stateController.add(s);
+  }
 
   void _doConnect() {
+    _setState(WsConnectionState.connecting);
+
+    // On first attempt after a cold start Render can be slow — show "waking"
+    if (_reconnectAttempts == 0) {
+      _setState(WsConnectionState.waking);
+    }
+
     try {
-      final uri = Uri.parse(ApiClient.instance.wsUrl);
+      // Use ApiClient.wsUrl which is derived from the production base URL
+      final wsUrl = ApiClient.instance.wsUrl;
+      debugPrint('[WS] Connecting → $wsUrl');
+      final uri = Uri.parse(wsUrl);
       _channel = WebSocketChannel.connect(uri);
-      _connected = true;
-      _reconnectTimer?.cancel();
+
+      _setState(WsConnectionState.connected);
+      _reconnectAttempts = 0;
 
       _subscription = _channel!.stream.listen(
         _onMessage,
@@ -72,11 +103,11 @@ class WsService {
         cancelOnError: false,
       );
 
-      debugPrint('[WS] Connected to ${ApiClient.instance.wsUrl}');
+      debugPrint('[WS] Connected ✓');
     } catch (e) {
       debugPrint('[WS] Connect failed: $e');
-      _connected = false;
-      _scheduleReconnect();
+      _setState(WsConnectionState.disconnected);
+      if (!_intentionalClose) _scheduleReconnect();
     }
   }
 
@@ -86,8 +117,7 @@ class WsService {
       final eventStr = json['event'] as String? ?? '';
       final data = json['data'] as Map<String, dynamic>? ?? {};
       final event = WsEvent(type: _parse(eventStr), data: data);
-      debugPrint('[WS] ← $eventStr');
-      _controller.add(event);
+      _eventController.add(event);
     } catch (e) {
       debugPrint('[WS] Parse error: $e');
     }
@@ -95,49 +125,48 @@ class WsService {
 
   void _onError(Object error) {
     debugPrint('[WS] Error: $error');
-    _connected = false;
     _cleanup();
+    _setState(WsConnectionState.disconnected);
     if (!_intentionalClose) _scheduleReconnect();
   }
 
   void _onDone() {
     debugPrint('[WS] Connection closed');
-    _connected = false;
+    _cleanup();
+    _setState(WsConnectionState.disconnected);
     if (!_intentionalClose) _scheduleReconnect();
   }
 
   void _cleanup() {
+    _reconnectTimer?.cancel();
     _subscription?.cancel();
     _subscription = null;
-    try {
-      _channel?.sink.close();
-    } catch (_) {}
+    try { _channel?.sink.close(); } catch (_) {}
     _channel = null;
-    _connected = false;
   }
 
+  /// Exponential back-off: 5s → 10s → 20s → … capped at 60s.
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 5), () {
-      debugPrint('[WS] Reconnecting…');
-      _doConnect();
-    });
+    _reconnectAttempts++;
+    final base = ApiConfig.wsReconnectBase.inSeconds;
+    final cap  = ApiConfig.wsReconnectMax.inSeconds;
+    final delay = Duration(
+      seconds: min(cap, (base * pow(2, _reconnectAttempts - 1)).toInt()),
+    );
+    debugPrint('[WS] Reconnecting in ${delay.inSeconds}s '
+        '(attempt $_reconnectAttempts)…');
+    _reconnectTimer = Timer(delay, _doConnect);
   }
 
   WsEventType _parse(String event) {
     switch (event) {
-      case 'issue.created':
-        return WsEventType.issueCreated;
-      case 'issue.updated':
-        return WsEventType.issueUpdated;
-      case 'traffic.update':
-        return WsEventType.trafficUpdate;
-      case 'parking.update':
-        return WsEventType.parkingUpdate;
-      case 'waste.update':
-        return WsEventType.wasteUpdate;
-      default:
-        return WsEventType.unknown;
+      case 'issue.created':  return WsEventType.issueCreated;
+      case 'issue.updated':  return WsEventType.issueUpdated;
+      case 'traffic.update': return WsEventType.trafficUpdate;
+      case 'parking.update': return WsEventType.parkingUpdate;
+      case 'waste.update':   return WsEventType.wasteUpdate;
+      default:               return WsEventType.unknown;
     }
   }
 }

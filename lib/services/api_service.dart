@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'api_client.dart';
 import 'civic_issues_service.dart';
 
@@ -165,8 +166,15 @@ class ApiService {
       );
       if (response.data != null) return CivicIssue.fromJson(response.data!);
       return null;
-    } catch (_) {
-      return null;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final body = e.response?.data?.toString() ?? e.message;
+      debugPrint('[Issues] createIssue failed — HTTP $status: $body');
+      // Rethrow with human-readable message so the UI can display it
+      throw Exception('Server error $status: $body');
+    } catch (e) {
+      debugPrint('[Issues] createIssue unexpected error: $e');
+      rethrow;
     }
   }
 
