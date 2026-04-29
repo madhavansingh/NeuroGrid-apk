@@ -8,6 +8,7 @@ import '../../services/civic_issues_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation.dart';
 import '../../widgets/loading_skeleton_widget.dart';
+import '../../widgets/server_wake_banner.dart';
 import './widgets/issue_card_widget.dart';
 import './widgets/issue_tab_bar_widget.dart';
 
@@ -60,6 +61,8 @@ class _CivicIssuesScreenState extends ConsumerState<CivicIssuesScreen>
       body: SafeArea(
         child: Column(
           children: [
+            // Render cold-start banner — hides once server is online
+            const ServerWakeBanner(),
             // Header — use data from provider so count is always live
             issuesAsync.when(
               data: (issues) => _buildHeader(issues.length, isError: false),

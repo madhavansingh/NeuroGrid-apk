@@ -7,7 +7,10 @@ import '../../core/app_export.dart';
 import '../../providers/city_state_provider.dart';
 import '../../providers/issues_provider.dart';
 import '../../routes/app_routes.dart';
+import '../../services/auth_service.dart';
 import '../../services/ws_service.dart';
+import '../../providers/user_session_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import './widgets/account_info_widget.dart';
 import './widgets/notification_toggles_widget.dart';
 import './widgets/preferences_widget.dart';
@@ -238,10 +241,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               color: AppTheme.primaryLight,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.settings_outlined,
-              size: 18,
-              color: AppTheme.primary,
+            child: GestureDetector(
+              onTap: () => Navigator.pushNamed(context, AppRoutes.settingsScreen),
+              child: const Icon(
+                Icons.settings_outlined,
+                size: 18,
+                color: AppTheme.primary,
+              ),
             ),
           ),
         ],
@@ -270,19 +276,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             icon: Icons.help_outline_rounded,
             label: 'Help & Support',
             color: AppTheme.primary,
-            onTap: () {},
+            onTap: () => launchUrl(Uri.parse('mailto:support@neurogrid.in'), mode: LaunchMode.externalApplication),
           ),
           _ActionTile(
             icon: Icons.privacy_tip_outlined,
             label: 'Privacy Policy',
             color: const Color(0xFF7C3AED),
-            onTap: () {},
+            onTap: () => launchUrl(Uri.parse('https://neurogrid.in/privacy'), mode: LaunchMode.externalApplication),
           ),
           _ActionTile(
             icon: Icons.info_outline_rounded,
             label: 'About NeuroGrid',
             color: AppTheme.textSecondary,
-            onTap: () {},
+            onTap: () => Navigator.pushNamed(context, AppRoutes.settingsScreen),
           ),
           _ActionTile(
             icon: Icons.logout_rounded,
@@ -353,21 +359,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
   Future<void> _performSignOut() async {
-    // 1. Clear the onboarding/session flags so the full flow shows on next launch
+    // 1. Google sign-out (revokes token)
+    await AuthService.instance.signOut();
+
+    // 2. Clear the onboarding/session flags so the full flow shows on next launch
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('has_onboarded');
     await prefs.remove('has_logged_in');
 
-    // 2. Disconnect WebSocket — stops all live event streams
+    // 3. Disconnect WebSocket — stops all live event streams
     WsService.instance.disconnect();
 
-    // 3. Invalidate Riverpod providers — clears all cached data
+    // 4. Invalidate Riverpod providers — clears all cached data
     ref.invalidate(issuesProvider);
     ref.invalidate(cityStateProvider);
     ref.invalidate(citySummaryProvider);
+    ref.invalidate(userSessionProvider);
 
-    // 4. Navigate to splash screen and wipe the entire back stack
-    //    User cannot press Back to re-enter the app
+    // 5. Navigate to splash screen and wipe the entire back stack
     if (mounted) {
       await Navigator.of(context).pushNamedAndRemoveUntil(
         AppRoutes.splashScreen,

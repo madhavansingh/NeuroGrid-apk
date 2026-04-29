@@ -37,6 +37,7 @@ class _ParkingZonesScreenState extends State<ParkingZonesScreen>
       ratePerHour: 30,
       distance: '0.4 km',
       icon: Icons.store_mall_directory_rounded,
+      lat: 23.2337, lng: 77.4218,
     ),
     ParkingZoneData(
       zoneName: 'MP Nagar Hub',
@@ -48,6 +49,7 @@ class _ParkingZonesScreenState extends State<ParkingZonesScreen>
       ratePerHour: 20,
       distance: '0.8 km',
       icon: Icons.business_center_rounded,
+      lat: 23.2315, lng: 77.4340,
     ),
     ParkingZoneData(
       zoneName: 'DB City Mall',
@@ -59,6 +61,7 @@ class _ParkingZonesScreenState extends State<ParkingZonesScreen>
       ratePerHour: 40,
       distance: '1.2 km',
       icon: Icons.local_mall_rounded,
+      lat: 23.2183, lng: 77.4384,
     ),
     ParkingZoneData(
       zoneName: 'Bittan Market',
@@ -70,6 +73,7 @@ class _ParkingZonesScreenState extends State<ParkingZonesScreen>
       ratePerHour: 10,
       distance: '1.6 km',
       icon: Icons.storefront_rounded,
+      lat: 23.2197, lng: 77.4501,
     ),
     ParkingZoneData(
       zoneName: 'Hamidia Road Lot',
@@ -81,6 +85,7 @@ class _ParkingZonesScreenState extends State<ParkingZonesScreen>
       ratePerHour: 25,
       distance: '2.1 km',
       icon: Icons.directions_car_rounded,
+      lat: 23.2680, lng: 77.4012,
     ),
     ParkingZoneData(
       zoneName: 'Shyamla Hills',
@@ -92,6 +97,7 @@ class _ParkingZonesScreenState extends State<ParkingZonesScreen>
       ratePerHour: 15,
       distance: '2.8 km',
       icon: Icons.park_rounded,
+      lat: 23.2764, lng: 77.4142,
     ),
   ];
 

@@ -173,11 +173,10 @@ class _MapCanvasWidgetState extends State<MapCanvasWidget> {
 
   String _tileUrl() {
     if (widget.mapStyle == 'Satellite') {
-      // ESRI World Imagery (satellite) - free, no API key
       return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
     }
-    // OpenStreetMap standard tiles
-    return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    // CartoDB Positron — clean light neutral, matches app design system
+    return 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
   }
 
   @override

@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../theme/app_theme.dart';
 
 enum DemandLevel { low, moderate, high }
@@ -15,6 +16,8 @@ class ParkingZoneData {
   final double ratePerHour;
   final String distance;
   final IconData icon;
+  final double lat;
+  final double lng;
 
   const ParkingZoneData({
     required this.zoneName,
@@ -26,6 +29,8 @@ class ParkingZoneData {
     required this.ratePerHour,
     required this.distance,
     required this.icon,
+    this.lat = 23.2599,
+    this.lng = 77.4126,
   });
 
   double get occupancyRatio => 1 - (availableSlots / totalSlots);
@@ -40,6 +45,17 @@ class ZoneCardWidget extends StatelessWidget {
     required this.zone,
     required this.animIndex,
   });
+
+  Future<void> _openInMaps() async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '&destination=${zone.lat},${zone.lng}'
+      '&travelmode=driving',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
 
   Color get _demandColor {
     switch (zone.demand) {
@@ -337,18 +353,28 @@ class ZoneCardWidget extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        // Navigate button
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: AppTheme.primaryLight,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Icon(
-            Icons.directions_rounded,
-            size: 16,
-            color: AppTheme.primary,
+        // Navigate button → opens Google Maps
+        GestureDetector(
+          onTap: () => _openInMaps(),
+          child: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1A6BF5), Color(0xFF4A8FFF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primary.withAlpha(60),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.directions_rounded, size: 16, color: Colors.white),
           ),
         ),
       ],
