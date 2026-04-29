@@ -1,149 +1,203 @@
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/app_export.dart';
+import '../../providers/server_status_provider.dart';
 import '../../routes/app_routes.dart';
-import './widgets/city_services_grid_widget.dart';
+import '../../widgets/server_wake_banner.dart';
+import '../../widgets/voice_fab.dart';
 import './widgets/home_header_widget.dart';
 import './widgets/leave_now_card_widget.dart';
 import './widgets/quick_insights_widget.dart';
+import './widgets/city_services_grid_widget.dart';
+import './widgets/city_alerts_feed_widget.dart';
+import './widgets/weather_hero_card.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
-
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with TickerProviderStateMixin {
   int _navIndex = 0;
-  late AnimationController _entranceController;
-  late List<Animation<double>> _sectionAnimations;
+  bool _refreshing = false;
+  late AnimationController _entranceCtrl;
+  late List<Animation<double>> _sectionAnims;
 
   @override
   void initState() {
     super.initState();
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-      ),
-    );
-    _entranceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    );
-    _sectionAnimations = List.generate(
-      5,
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ));
+    _entranceCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 900));
+    _sectionAnims = List.generate(
+      7,
       (i) => CurvedAnimation(
-        parent: _entranceController,
-        curve: Interval(i * 0.12, 0.65 + i * 0.07, curve: Curves.easeOutCubic),
+        parent: _entranceCtrl,
+        curve:
+            Interval(i * 0.09, 0.55 + i * 0.07, curve: Curves.easeOutCubic),
       ),
     );
-    _entranceController.forward();
+    _entranceCtrl.forward();
+    // Kick off server health check for Render cold-start detection
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => ref.read(serverStatusProvider),
+    );
   }
 
   @override
   void dispose() {
-    _entranceController.dispose();
+    _entranceCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleRefresh() async {
+    setState(() => _refreshing = true);
+    HapticFeedback.mediumImpact();
+    await Future.delayed(const Duration(milliseconds: 1600));
+    if (mounted) setState(() => _refreshing = false);
+  }
+
+  Widget _animated(int idx, Widget child) {
+    return FadeTransition(
+      opacity: _sectionAnims[idx],
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
+            .animate(_sectionAnims[idx]),
+        child: child,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: const Color(0xFFF0F4FF),
       extendBody: true,
-      body: SafeArea(
-        bottom: false,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFEEF2FF), Color(0xFFF8FAFF), Color(0xFFF4F7FF)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: [0.0, 0.4, 1.0],
+          ),
+        ),
+        child: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: const Color(0xFF1A6BF5),
+        backgroundColor: Colors.white,
+        displacement: 60,
         child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
+          physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics()),
           slivers: [
-            // Header: greeting + location
+            // ── Render cold-start banner ──────────────────────────────────
+            const SliverToBoxAdapter(child: ServerWakeBanner()),
+
+            // ── Refreshing banner ─────────────────────────────────────────
+            if (_refreshing)
+              SliverToBoxAdapter(
+                child: _RefreshBanner(),
+              ),
+
+            // ── Header ────────────────────────────────────────────────────
             SliverToBoxAdapter(
-              child: FadeTransition(
-                opacity: _sectionAnimations[0],
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.04),
-                    end: Offset.zero,
-                  ).animate(_sectionAnimations[0]),
-                  child: const HomeHeaderWidget(),
+              child: _animated(0, const HomeHeaderWidget()),
+            ),
+
+            // ── Hero: Should you leave now? ───────────────────────────────
+            SliverToBoxAdapter(
+              child: _animated(
+                1,
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 4, 20, 0),
+                  child: LeaveNowCardWidget(),
                 ),
               ),
             ),
-            // Hero card: Should you leave now?
+
+            // ── Quick insights row ────────────────────────────────────────
             SliverToBoxAdapter(
-              child: FadeTransition(
-                opacity: _sectionAnimations[1],
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.06),
-                    end: Offset.zero,
-                  ).animate(_sectionAnimations[1]),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: LeaveNowCardWidget(),
-                  ),
+              child: _animated(
+                2,
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 24, 20, 0),
+                  child: QuickInsightsWidget(),
                 ),
               ),
             ),
-            // 3 insight cards: Traffic, Weather, Alerts
+
+            // ── Weather section label ──────────────────────────────────────
             SliverToBoxAdapter(
-              child: FadeTransition(
-                opacity: _sectionAnimations[2],
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.05),
-                    end: Offset.zero,
-                  ).animate(_sectionAnimations[2]),
-                  child: const Padding(
-                    padding: EdgeInsets.only(top: 28, left: 20, right: 20),
-                    child: QuickInsightsWidget(),
-                  ),
+              child: _animated(
+                3,
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 24, 20, 10),
+                  child: _SectionLabel(
+                      title: 'Current Weather',
+                      subtitle: 'Bhopal · Real-time'),
                 ),
               ),
             ),
-            // Quick actions grid (4 max)
+
+            // ── Weather hero card ─────────────────────────────────────────
             SliverToBoxAdapter(
-              child: FadeTransition(
-                opacity: _sectionAnimations[3],
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.05),
-                    end: Offset.zero,
-                  ).animate(_sectionAnimations[3]),
-                  child: const Padding(
-                    padding: EdgeInsets.only(top: 28, left: 20, right: 20),
-                    child: CityServicesGridWidget(),
-                  ),
+              child: _animated(
+                3,
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(0, 0, 0, 0),
+                  child: WeatherHeroCard(),
                 ),
               ),
             ),
-            // Emergency mode banner
+
+            // ── Smart actions grid ────────────────────────────────────────
             SliverToBoxAdapter(
-              child: FadeTransition(
-                opacity: _sectionAnimations[4],
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.05),
-                    end: Offset.zero,
-                  ).animate(_sectionAnimations[4]),
-                  child: Padding(
-                    padding: const EdgeInsets.only(
-                      top: 28,
-                      left: 20,
-                      right: 20,
-                    ),
-                    child: _EmergencyBanner(),
-                  ),
+              child: _animated(
+                4,
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 28, 20, 0),
+                  child: CityServicesGridWidget(),
                 ),
               ),
             ),
-            const SliverToBoxAdapter(child: SizedBox(height: 110)),
+
+            // ── Live city feed ────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: _animated(
+                5,
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 28, 20, 0),
+                  child: CityAlertsFeedWidget(),
+                ),
+              ),
+            ),
+
+            // ── Emergency banner ──────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: _animated(
+                6,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                  child: _EmergencyBanner(),
+                ),
+              ),
+            ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 120)),
           ],
         ),
       ),
+      ),
+      floatingActionButton: const VoiceFab(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: AppNavigation(
         currentIndex: _navIndex,
         onTap: (i) {
@@ -158,61 +212,120 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 }
 
+
+// ── Refresh banner ─────────────────────────────────────────────────────────────
+
+class _RefreshBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFF1A6BF5),
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 14, height: 14,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)),
+          ),
+          const SizedBox(width: 10),
+          Text('Updating city data…',
+              style: GoogleFonts.dmSans(
+                  fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Emergency banner ────────────────────────────────────────────────────────────
+
 class _EmergencyBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => Navigator.pushNamed(context, AppRoutes.emergencyScreen),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         decoration: BoxDecoration(
-          color: AppTheme.errorLight,
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF3B30), Color(0xFFFF6B6B)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppTheme.error.withAlpha(60), width: 1),
+          boxShadow: [
+            BoxShadow(
+                color: const Color(0xFFFF3B30).withAlpha(60),
+                blurRadius: 20,
+                offset: const Offset(0, 8)),
+          ],
         ),
         child: Row(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 44, height: 44,
               decoration: BoxDecoration(
-                color: AppTheme.error,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.emergency_rounded,
-                size: 20,
-                color: Colors.white,
-              ),
+                  color: Colors.white.withAlpha(30),
+                  borderRadius: BorderRadius.circular(14)),
+              child: const Icon(Icons.emergency_rounded, size: 22,
+                  color: Colors.white),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Emergency Mode',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.error,
-                    ),
-                  ),
-                  Text(
-                    'Tap to activate emergency services',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: AppTheme.error.withAlpha(180),
-                    ),
-                  ),
+                  Text('Emergency Mode',
+                      style: GoogleFonts.dmSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white)),
+                  Text('Tap to activate emergency services',
+                      style: GoogleFonts.dmSans(
+                          fontSize: 13, color: Colors.white70)),
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: AppTheme.error, size: 20),
+            const Icon(Icons.chevron_right_rounded,
+                color: Colors.white70, size: 22),
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Section label ───────────────────────────────────────────────────────────
+
+class _SectionLabel extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  const _SectionLabel({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style: GoogleFonts.dmSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0F172A))),
+            const SizedBox(height: 2),
+            Text(subtitle,
+                style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF64748B))),
+          ],
+        ),
+      ],
     );
   }
 }

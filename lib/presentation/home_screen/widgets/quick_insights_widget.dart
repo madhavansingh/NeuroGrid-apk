@@ -139,15 +139,40 @@ class _QuickInsightsWidgetState extends ConsumerState<QuickInsightsWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Quick Insights',
-          style: GoogleFonts.dmSans(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: AppTheme.textPrimary,
+        Row(children: [
+          Text(
+            'Quick Insights',
+            style: GoogleFonts.dmSans(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF0F172A),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFECFDF5),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: const Color(0xFF10B981).withAlpha(60), width: 1),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 6, height: 6,
+                decoration: const BoxDecoration(
+                    color: Color(0xFF10B981), shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 5),
+              Text('Live',
+                  style: GoogleFonts.dmSans(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF059669))),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 14),
         Row(
           children: [
             // ── Traffic card — live from backend ──────────────────────────
@@ -245,53 +270,67 @@ class _QuickInsightsWidgetState extends ConsumerState<QuickInsightsWidget> {
 
 // ── Skeleton ───────────────────────────────────────────────────────────────────
 
-class _InsightCardSkeleton extends StatelessWidget {
+class _InsightCardSkeleton extends StatefulWidget {
+  @override
+  State<_InsightCardSkeleton> createState() => _InsightCardSkeletonState();
+}
+
+class _InsightCardSkeletonState extends State<_InsightCardSkeleton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _c;
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+        vsync: this, duration: const Duration(seconds: 1))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(13),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, __) {
+        final opacity = 0.4 + 0.3 * _c.value;
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [BoxShadow(
+                color: Colors.black.withAlpha(10),
+                blurRadius: 12, offset: const Offset(0, 4))],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.grey.withAlpha(40),
-              borderRadius: BorderRadius.circular(10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 46, height: 46,
+              decoration: BoxDecoration(
+                color: Colors.grey.withAlpha((opacity * 80).toInt()),
+                borderRadius: BorderRadius.circular(14)),
             ),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            height: 16,
-            width: 50,
-            decoration: BoxDecoration(
-              color: Colors.grey.withAlpha(40),
-              borderRadius: BorderRadius.circular(4),
+            const SizedBox(height: 12),
+            Container(
+              height: 18, width: 52,
+              decoration: BoxDecoration(
+                color: Colors.grey.withAlpha((opacity * 80).toInt()),
+                borderRadius: BorderRadius.circular(6)),
             ),
-          ),
-          const SizedBox(height: 4),
-          Container(
-            height: 10,
-            width: 40,
-            decoration: BoxDecoration(
-              color: Colors.grey.withAlpha(25),
-              borderRadius: BorderRadius.circular(4),
+            const SizedBox(height: 5),
+            Container(
+              height: 11, width: 44,
+              decoration: BoxDecoration(
+                color: Colors.grey.withAlpha((opacity * 50).toInt()),
+                borderRadius: BorderRadius.circular(4)),
             ),
-          ),
-        ],
-      ),
+          ]),
+        );
+      },
     );
   }
 }
@@ -320,61 +359,85 @@ class _InsightCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(13),
-            blurRadius: 12,
+            color: iconColor.withAlpha(25),
+            blurRadius: 16,
             offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Colors.black.withAlpha(8),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Thin gradient accent bar on top
+            Container(
+              height: 3,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [iconColor, iconColor.withAlpha(80)],
+                ),
+              ),
             ),
-            child: Icon(icon, size: 18, color: iconColor),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: GoogleFonts.dmSans(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: valueColor,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: iconBg,
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Icon(icon, size: 21, color: iconColor),
+                  ),
+                  const SizedBox(height: 11),
+                  Text(
+                    value,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: valueColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w400,
+                      color: const Color(0xFF94A3B8),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: GoogleFonts.dmSans(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textSecondary,
-            ),
-          ),
-          Text(
-            subtitle,
-            style: GoogleFonts.dmSans(
-              fontSize: 10,
-              fontWeight: FontWeight.w400,
-              color: AppTheme.textMuted,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
