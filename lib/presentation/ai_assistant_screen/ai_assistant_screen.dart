@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/app_export.dart';
-import '../../providers/chat_notifier.dart';
+import '../../core/services/aiIntegrations/direct_ai_service.dart';
+import '../../providers/voice_provider.dart';
+import '../../widgets/voice_fab.dart';
 import '../../routes/app_routes.dart';
+import '../voice_assistant/voice_modal.dart';
 
 class AiAssistantScreen extends ConsumerStatefulWidget {
   const AiAssistantScreen({super.key});
@@ -25,39 +28,11 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
   final List<_ChatMessage> _messages = [
     _ChatMessage(
       text:
-          'Hello! I\'m NeuroGrid AI. Ask me anything about city conditions, traffic, parking, or events.',
+          'Hello! I\'m NeuroGrid AI. Ask me anything about city conditions, traffic, parking, or events in Bhopal.',
       isUser: false,
-      time: '9:00 AM',
-    ),
-    _ChatMessage(
-      text: 'What\'s the traffic like on Hamidia Road right now?',
-      isUser: true,
-      time: '9:01 AM',
-    ),
-    _ChatMessage(
-      text:
-          'Hamidia Road is currently experiencing heavy traffic near the overbridge. An earlier accident has been cleared, but expect +18 min delay. I suggest taking Sultania Road as an alternate route.',
-      isUser: false,
-      time: '9:01 AM',
-    ),
-    _ChatMessage(
-      text: 'Any parking near DB City Mall?',
-      isUser: true,
-      time: '9:03 AM',
-    ),
-    _ChatMessage(
-      text:
-          'DB City Mall parking (Zone Z-03) has only 5 spots available out of 120. High demand right now. I recommend MP Nagar Hub (Zone Z-02) — 28 spots available, just 0.8 km away at ₹20/hr.',
-      isUser: false,
-      time: '9:03 AM',
+      time: ''
     ),
   ];
-
-  static const _config = ChatConfig(
-    provider: 'GEMINI',
-    model: 'gemini/gemini-2.0-flash',
-    streaming: false,
-  );
 
   static const String _systemPrompt =
       'You are NeuroGrid AI, the intelligent city assistant for Bhopal, '
@@ -107,58 +82,53 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
 
   void _sendMessage() {
     final text = _inputController.text.trim();
-    if (text.isEmpty) return;
-
-    final userMessage = _ChatMessage(
-      text: text,
-      isUser: true,
-      time: _currentTime(),
-    );
+    if (text.isEmpty || _isTyping) return;
 
     setState(() {
-      _messages.add(userMessage);
+      _messages.add(_ChatMessage(text: text, isUser: true, time: _currentTime()));
       _inputController.clear();
       _isTyping = true;
     });
     _scrollToBottom();
 
-    // Add to history for context
     _history.add({'role': 'user', 'content': text});
 
-    // Build full message list with system prompt
     final apiMessages = [
       {'role': 'system', 'content': _systemPrompt},
       ..._history,
     ];
 
-    ref
-        .read(chatNotifierProvider(_config).notifier)
-        .sendMessage(apiMessages)
-        .then((_) {
+    sendDirectChatCompletion(apiMessages).then((reply) {
       if (!mounted) return;
-      final chatState = ref.read(chatNotifierProvider(_config));
-      final reply = chatState.response.isNotEmpty
-          ? chatState.response
-          : (chatState.error != null
-              ? 'Sorry, I could not reach the AI service. '
-                'Please check your API key in env.json.'
-              : 'No response received.');
-
-      // Add AI reply to history for multi-turn context
       _history.add({'role': 'assistant', 'content': reply});
-
       setState(() {
         _isTyping = false;
-        _messages.add(
-          _ChatMessage(text: reply, isUser: false, time: _currentTime()),
-        );
+        _messages.add(_ChatMessage(text: reply, isUser: false, time: _currentTime()));
       });
       _scrollToBottom();
-
-      // Reset the notifier so it's fresh for next message
-      ref.read(chatNotifierProvider(_config).notifier).clearResponse();
+    }).catchError((e) {
+      if (!mounted) return;
+      String errMsg;
+      final errStr = e.toString();
+      if (errStr.contains('No AI key')) {
+        errMsg = '⚠️ No AI key configured. Add GEMINI_API_KEY to assets/env.json.';
+      } else if (errStr.contains('401') || errStr.contains('403')) {
+        errMsg = '⚠️ AI key is invalid or expired. Check GEMINI_API_KEY / OPENAI_API_KEY.';
+      } else if (errStr.contains('429')) {
+        errMsg = '⚠️ AI rate limit reached. Please wait a moment and try again.';
+      } else if (errStr.contains('SocketException') || errStr.contains('NetworkException')) {
+        errMsg = '⚠️ No internet connection. Please check your network.';
+      } else {
+        errMsg = '⚠️ ${errStr.replaceAll('Exception: ', '')}';
+      }
+      setState(() {
+        _isTyping = false;
+        _messages.add(_ChatMessage(text: errMsg, isUser: false, time: _currentTime()));
+      });
+      _scrollToBottom();
     });
   }
+
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -225,111 +195,119 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
   }
 
   Widget _buildHeader(BuildContext context) {
-    return SafeArea(
-      bottom: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-        child: Row(
-          children: [
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(10),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.arrow_back_ios_new_rounded,
-                  size: 16,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1250C4), Color(0xFF4A8FFF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.smart_toy_rounded,
-                size: 20,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'NeuroGrid AI',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF22C55E),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        'Online · City data synced',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w400,
-                          color: AppTheme.textMuted,
-                        ),
-                      ),
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFEEF2FF), Color(0xFFF8FAFF)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+          child: Row(
+            children: [
+              // Back button
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: 42, height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(10),
+                        blurRadius: 12, offset: const Offset(0, 3)),
                     ],
                   ),
-                ],
+                  child: const Icon(Icons.arrow_back_ios_new_rounded,
+                      size: 16, color: Color(0xFF0F172A)),
+                ),
               ),
-            ),
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(8),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+              const SizedBox(width: 14),
+
+              // AI avatar with glow
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1250C4), Color(0xFF4A8FFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ],
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1A6BF5).withAlpha(70),
+                      blurRadius: 14, offset: const Offset(0, 5)),
+                  ],
+                ),
+                child: const Icon(Icons.smart_toy_rounded, size: 22, color: Colors.white),
               ),
-              child: const Icon(
-                Icons.more_horiz_rounded,
-                size: 20,
-                color: AppTheme.textSecondary,
+              const SizedBox(width: 12),
+
+              // Title + status
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('NeuroGrid AI',
+                        style: GoogleFonts.dmSans(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                            letterSpacing: -0.3)),
+                    const SizedBox(height: 2),
+                    Row(children: [
+                      Container(
+                        width: 7, height: 7,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF22C55E), shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 5),
+                      Text('Online · City data synced',
+                          style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF64748B))),
+                    ]),
+                  ],
+                ),
               ),
-            ),
-          ],
+
+              // Voice button with gradient glow
+              GestureDetector(
+                onTap: () async {
+                  final granted = await ref
+                      .read(voiceProvider.notifier)
+                      .requestMicPermission();
+                  if (!granted || !context.mounted) return;
+                  unawaited(ref.read(voiceProvider.notifier).startCall());
+                  await VoiceModal.show(context);
+                },
+                child: Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1A6BF5), Color(0xFF4A8FFF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF1A6BF5).withAlpha(90),
+                        blurRadius: 14, offset: const Offset(0, 5)),
+                    ],
+                  ),
+                  child: const Icon(Icons.mic_rounded, size: 22, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -341,6 +319,52 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Voice-first banner ─────────────────────────────────────────
+          GestureDetector(
+            onTap: () async {
+              final granted = await ref.read(voiceProvider.notifier).requestMicPermission();
+              if (!granted || !context.mounted) return;
+              unawaited(ref.read(voiceProvider.notifier).startCall());
+              await VoiceModal.show(context);
+            },
+            child: Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1250C4), Color(0xFF1A6BF5), Color(0xFF4A8FFF)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1A6BF5).withAlpha(80),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Row(children: [
+                Container(
+                  width: 52, height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(25),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.mic_rounded, size: 26, color: Colors.white),
+                ),
+                const SizedBox(width: 14),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Talk to City AI', style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                  const SizedBox(height: 2),
+                  Text('Tap to start a voice conversation', style: GoogleFonts.dmSans(fontSize: 12, color: Colors.white.withAlpha(180))),
+                ])),
+                const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 22),
+              ]),
+            ),
+          ),
           Text(
             'Quick questions',
             style: GoogleFonts.dmSans(
@@ -363,20 +387,26 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
+                          horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppTheme.surface,
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppTheme.outline, width: 1),
+                        border: Border.all(
+                            color: const Color(0xFF1A6BF5).withAlpha(50),
+                            width: 1.2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF1A6BF5).withAlpha(12),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2)),
+                        ],
                       ),
                       child: Text(
                         s,
                         style: GoogleFonts.dmSans(
                           fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1A6BF5),
                         ),
                       ),
                     ),
@@ -393,15 +423,13 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
-        mainAxisAlignment: msg.isUser
-            ? MainAxisAlignment.end
-            : MainAxisAlignment.start,
+        mainAxisAlignment:
+            msg.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!msg.isUser) ...[
             Container(
-              width: 30,
-              height: 30,
+              width: 30, height: 30,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFF1250C4), Color(0xFF4A8FFF)],
@@ -410,11 +438,8 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
                 ),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
-                Icons.smart_toy_rounded,
-                size: 16,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.smart_toy_rounded,
+                  size: 16, color: Colors.white),
             ),
             const SizedBox(width: 10),
           ],
@@ -426,11 +451,17 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+                      horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: msg.isUser ? AppTheme.primary : AppTheme.surface,
+                    // User bubbles: gradient; AI bubbles: clean white card
+                    gradient: msg.isUser
+                        ? const LinearGradient(
+                            colors: [Color(0xFF1250C4), Color(0xFF1A6BF5)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
+                    color: msg.isUser ? null : Colors.white,
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(18),
                       topRight: const Radius.circular(18),
@@ -440,9 +471,9 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
                     boxShadow: [
                       BoxShadow(
                         color: msg.isUser
-                            ? AppTheme.primary.withAlpha(50)
+                            ? const Color(0xFF1A6BF5).withAlpha(60)
                             : Colors.black.withAlpha(10),
-                        blurRadius: 12,
+                        blurRadius: 14,
                         offset: const Offset(0, 4),
                       ),
                     ],
@@ -452,8 +483,10 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w400,
-                      color: msg.isUser ? Colors.white : AppTheme.textPrimary,
-                      height: 1.5,
+                      color: msg.isUser
+                          ? Colors.white
+                          : const Color(0xFF0F172A),
+                      height: 1.55,
                     ),
                   ),
                 ),
@@ -462,8 +495,7 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
                   msg.time,
                   style: GoogleFonts.dmSans(
                     fontSize: 10,
-                    fontWeight: FontWeight.w400,
-                    color: AppTheme.textMuted,
+                    color: const Color(0xFFB0BCCE),
                   ),
                 ),
               ],
@@ -545,51 +577,48 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
   }
 
   Widget _buildInputArea(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final bottomPad = MediaQuery.of(context).padding.bottom;
     return Container(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 12,
-        bottom: MediaQuery.of(context).viewInsets.bottom > 0
-            ? 12
-            : MediaQuery.of(context).padding.bottom + 80,
-      ),
+      padding: EdgeInsets.fromLTRB(
+          16, 10, 16, bottomInset > 0 ? 12 : bottomPad + 80),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: const Color(0xFFE8EDF5), width: 1)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(12),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
+            color: Colors.black.withAlpha(8),
+            blurRadius: 20, offset: const Offset(0, -4)),
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
-                color: AppTheme.background,
+                color: const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppTheme.outline, width: 1),
+                border: Border.all(
+                    color: const Color(0xFFCDD9EE), width: 1.2),
               ),
               child: TextField(
                 controller: _inputController,
                 style: GoogleFonts.dmSans(
-                  fontSize: 14,
-                  color: AppTheme.textPrimary,
-                ),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: const Color(0xFF0F172A)),
                 decoration: InputDecoration(
                   hintText: 'Ask about city conditions…',
                   hintStyle: GoogleFonts.dmSans(
-                    fontSize: 14,
-                    color: AppTheme.textMuted,
-                  ),
+                    fontSize: 14, color: const Color(0xFFB0BCCE)),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 10),
                 ),
                 maxLines: 3,
                 minLines: 1,
@@ -602,28 +631,27 @@ class _AiAssistantScreenState extends ConsumerState<AiAssistantScreen>
           GestureDetector(
             onTap: _sendMessage,
             child: Container(
-              width: 46,
-              height: 46,
+              width: 46, height: 46,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1250C4), Color(0xFF4A8FFF)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                gradient: _isTyping
+                    ? const LinearGradient(
+                        colors: [Color(0xFFCDD9EE), Color(0xFFCDD9EE)])
+                    : const LinearGradient(
+                        colors: [Color(0xFF1250C4), Color(0xFF4A8FFF)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                 borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primary.withAlpha(80),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: _isTyping
+                    ? []
+                    : [
+                        BoxShadow(
+                          color: const Color(0xFF1A6BF5).withAlpha(90),
+                          blurRadius: 14, offset: const Offset(0, 5)),
+                      ],
               ),
-              child: const Icon(
-                Icons.send_rounded,
-                size: 20,
-                color: Colors.white,
-              ),
+              child: const Icon(Icons.send_rounded,
+                  size: 20, color: Colors.white),
             ),
           ),
         ],
