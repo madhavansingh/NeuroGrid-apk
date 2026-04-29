@@ -2,12 +2,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/app_export.dart';
+import '../core/config/app_config.dart';
 import '../widgets/custom_error_widget.dart';
 import './routes/app_routes.dart';
+import './services/auth_service.dart';
 import './services/ws_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load ALL env keys once — makes them available synchronously everywhere.
+  await AppConfig.load();
+
+  // Wire AuthService (Google Sign-In) from already-loaded config.
+  AuthService.initFromConfig();
 
   // Start WebSocket connection early so data is ready when screens load.
   // Providers (cityStateProvider, issuesProvider) will also call connect(),

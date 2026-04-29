@@ -360,4 +360,4 @@ The backend serves:
 
 ## 📄 License
 
-MIT © 2025 NeuroGrid Team
+MIT © 2026 NeuroGrid Team
