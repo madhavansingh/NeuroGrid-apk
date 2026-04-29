@@ -49,5 +49,7 @@
 	<string>This app needs access to location to show your current position on the map.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>This app needs access to location to show your current position on the map.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NeuroGrid uses your microphone for the AI voice assistant to answer your city questions hands-free.</string>
 </dict>
 </plist>

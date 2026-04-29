@@ -12,6 +12,7 @@ import '../presentation/splash_screen/splash_screen.dart';
 import '../presentation/onboarding_screen/onboarding_screen.dart';
 import '../presentation/civic_issues_screen/civic_issues_screen.dart';
 import '../presentation/report_issue_screen/report_issue_screen.dart';
+import '../presentation/settings_screen/settings_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -27,6 +28,7 @@ class AppRoutes {
   static const String emergencyScreen = '/emergency-screen';
   static const String civicIssuesScreen = '/civic-issues-screen';
   static const String reportIssueScreen = '/report-issue-screen';
+  static const String settingsScreen = '/settings-screen';
 
   static Map<String, WidgetBuilder> routes = {
     initial: (context) => const SplashScreen(),
@@ -41,5 +43,6 @@ class AppRoutes {
     emergencyScreen: (context) => const EmergencyScreen(),
     civicIssuesScreen: (context) => const CivicIssuesScreen(),
     reportIssueScreen: (context) => const ReportIssueScreen(),
+    settingsScreen: (context) => const SettingsScreen(),
   };
 }
