@@ -1,29 +1,29 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/weather_service.dart';
+import '../../../providers/weather_provider.dart';
+import '../../../providers/location_provider.dart';
 
 /// Premium full-width weather card for the home screen.
-/// Shows temperature, feels-like, condition, humidity, wind + animated sky.
-class WeatherHeroCard extends StatefulWidget {
+/// Reads real-time weather from [weatherProvider] (GPS-aware, no AppConfig race).
+class WeatherHeroCard extends ConsumerStatefulWidget {
   const WeatherHeroCard({super.key});
 
   @override
-  State<WeatherHeroCard> createState() => _WeatherHeroCardState();
+  ConsumerState<WeatherHeroCard> createState() => _WeatherHeroCardState();
 }
 
-class _WeatherHeroCardState extends State<WeatherHeroCard>
+class _WeatherHeroCardState extends ConsumerState<WeatherHeroCard>
     with TickerProviderStateMixin {
-  final WeatherService _svc = WeatherService();
-  WeatherData? _data;
-  bool _loading = true;
-
   late AnimationController _cloudCtrl;
   late AnimationController _shimmerCtrl;
 
   @override
   void initState() {
     super.initState();
+
     _cloudCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 12),
@@ -34,8 +34,12 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
 
-    _svc.fetchWeather().then((d) {
-      if (mounted) setState(() { _data = d; _loading = false; });
+    // Kick off GPS fetch so weatherProvider gets real coordinates
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final loc = ref.read(locationProvider);
+      if (!loc.hasLocation && !loc.loading) {
+        ref.read(locationProvider.notifier).fetchLocation();
+      }
     });
   }
 
@@ -67,16 +71,12 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
       default:
         final hour = DateTime.now().hour;
         if (hour >= 6 && hour < 12) {
-          // Morning — warm orange-blue
           return [const Color(0xFF0F4C81), const Color(0xFFF97316)];
         } else if (hour >= 12 && hour < 17) {
-          // Afternoon — deep blue sky
           return [const Color(0xFF0369A1), const Color(0xFF38BDF8)];
         } else if (hour >= 17 && hour < 20) {
-          // Sunset
           return [const Color(0xFF9A3412), const Color(0xFFFBBF24)];
         } else {
-          // Night
           return [const Color(0xFF0A0E2A), const Color(0xFF1E3A6E)];
         }
     }
@@ -84,14 +84,20 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
 
   IconData _conditionIcon(String condition) {
     switch (condition.toLowerCase()) {
-      case 'thunderstorm': return Icons.thunderstorm_rounded;
-      case 'drizzle':      return Icons.grain_rounded;
-      case 'rain':         return Icons.umbrella_rounded;
-      case 'snow':         return Icons.ac_unit_rounded;
-      case 'clouds':       return Icons.cloud_rounded;
+      case 'thunderstorm':
+        return Icons.thunderstorm_rounded;
+      case 'drizzle':
+        return Icons.grain_rounded;
+      case 'rain':
+        return Icons.umbrella_rounded;
+      case 'snow':
+        return Icons.ac_unit_rounded;
+      case 'clouds':
+        return Icons.cloud_rounded;
       case 'mist':
       case 'fog':
-      case 'haze':         return Icons.blur_on_rounded;
+      case 'haze':
+        return Icons.blur_on_rounded;
       case 'clear':
       default:
         final hour = DateTime.now().hour;
@@ -102,8 +108,8 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
   }
 
   String _windDir(double speed) {
-    if (speed < 2)  return 'Calm';
-    if (speed < 6)  return 'Light';
+    if (speed < 2) return 'Calm';
+    if (speed < 6) return 'Light';
     if (speed < 12) return 'Moderate';
     return 'Strong';
   }
@@ -112,10 +118,19 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return _buildSkeleton();
-    final d = _data!;
+    final weatherAsync = ref.watch(weatherProvider);
+    final locState = ref.watch(locationProvider);
+
+    return weatherAsync.when(
+      loading: () => _buildSkeleton(),
+      error: (_, __) => _buildWeatherCard(WeatherData.fallback, locState.areaLabel),
+      data: (d) => _buildWeatherCard(d, locState.areaLabel),
+    );
+  }
+
+  Widget _buildWeatherCard(WeatherData d, String areaLabel) {
     final gradient = _skyGradient(d.condition);
-    final icon     = _conditionIcon(d.condition);
+    final icon = _conditionIcon(d.condition);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 0, 20, 0),
@@ -138,7 +153,7 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
         borderRadius: BorderRadius.circular(24),
         child: Stack(
           children: [
-            // ── Animated cloud blobs ────────────────────────────────────────
+            // ── Animated cloud blobs ─────────────────────────────────────────
             AnimatedBuilder(
               animation: _cloudCtrl,
               builder: (_, __) => CustomPaint(
@@ -147,28 +162,43 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
               ),
             ),
 
-            // ── Content ─────────────────────────────────────────────────────
+            // ── Content ──────────────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Top row — location label + badge
+                  // Top row — location label + badges
                   Row(children: [
                     const Icon(Icons.location_on_rounded,
                         size: 13, color: Colors.white70),
                     const SizedBox(width: 4),
-                    Text('Bhopal, MP',
+                    Flexible(
+                      child: Text(
+                        areaLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.dmSans(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Colors.white70)),
+                            color: Colors.white70),
+                      ),
+                    ),
                     const Spacer(),
-                    if (d.hasAlert)
+                    // LIVE badge
+                    _Badge(
+                      icon: Icons.sensors_rounded,
+                      label: 'LIVE',
+                      color: const Color(0xFF4ADE80),
+                    ),
+                    if (d.hasAlert) ...[
+                      const SizedBox(width: 6),
                       _Badge(
-                          icon: Icons.warning_amber_rounded,
-                          label: 'Alert',
-                          color: const Color(0xFFFBBF24)),
+                        icon: Icons.warning_amber_rounded,
+                        label: 'Alert',
+                        color: const Color(0xFFFBBF24),
+                      ),
+                    ],
                   ]),
 
                   const SizedBox(height: 18),
@@ -177,7 +207,7 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Temperature
+                      // Temperature column
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -229,9 +259,7 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
                   const SizedBox(height: 20),
 
                   // Divider
-                  Container(
-                      height: 1,
-                      color: Colors.white.withAlpha(30)),
+                  Container(height: 1, color: Colors.white.withAlpha(30)),
 
                   const SizedBox(height: 16),
 
@@ -276,8 +304,38 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
           margin: const EdgeInsets.fromLTRB(20, 0, 20, 0),
           height: 200,
           decoration: BoxDecoration(
-            color: Colors.grey.withAlpha((opacity * 255).toInt()),
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF3D5A80).withAlpha((opacity * 255).toInt()),
+                const Color(0xFF6B8DB8).withAlpha((opacity * 200).toInt()),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             borderRadius: BorderRadius.circular(24),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    color: Colors.white54,
+                    strokeWidth: 2.5,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Loading weather…',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    color: Colors.white60,
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -295,20 +353,20 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-    decoration: BoxDecoration(
-      color: Colors.white.withAlpha(25),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: color.withAlpha(180), width: 1),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 11, color: color),
-      const SizedBox(width: 4),
-      Text(label,
-          style: GoogleFonts.dmSans(
-              fontSize: 10, fontWeight: FontWeight.w700, color: color)),
-    ]),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.white.withAlpha(25),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withAlpha(180), width: 1),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(label,
+              style: GoogleFonts.dmSans(
+                  fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+        ]),
+      );
 }
 
 class _PulsingIcon extends StatelessWidget {
@@ -318,55 +376,55 @@ class _PulsingIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: ctrl,
-    builder: (_, __) {
-      final scale = 1.0 + 0.06 * math.sin(ctrl.value * math.pi);
-      return Transform.scale(
-        scale: scale,
-        child: Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(20),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, size: 44, color: Colors.white),
-        ),
+        animation: ctrl,
+        builder: (_, __) {
+          final scale = 1.0 + 0.06 * math.sin(ctrl.value * math.pi);
+          return Transform.scale(
+            scale: scale,
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(20),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 44, color: Colors.white),
+            ),
+          );
+        },
       );
-    },
-  );
 }
 
 class _StatPill extends StatelessWidget {
   final IconData icon;
   final String value;
   final String label;
-  const _StatPill({required this.icon, required this.value, required this.label});
+  const _StatPill(
+      {required this.icon, required this.value, required this.label});
 
   @override
   Widget build(BuildContext context) => Column(
-    children: [
-      Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: Colors.white.withAlpha(22),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, size: 18, color: Colors.white),
-      ),
-      const SizedBox(height: 5),
-      Text(value,
-          style: GoogleFonts.dmSans(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: Colors.white)),
-      Text(label,
-          style: GoogleFonts.dmSans(
-              fontSize: 10,
-              color: Colors.white60)),
-    ],
-  );
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(22),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 18, color: Colors.white),
+          ),
+          const SizedBox(height: 5),
+          Text(value,
+              style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white)),
+          Text(label,
+              style:
+                  GoogleFonts.dmSans(fontSize: 10, color: Colors.white60)),
+        ],
+      );
 }
 
 // ── Cloud painter ─────────────────────────────────────────────────────────────
@@ -382,7 +440,6 @@ class _CloudPainter extends CustomPainter {
     final offset1 = math.sin(progress * math.pi) * 30;
     final offset2 = math.cos(progress * math.pi) * 20;
 
-    // Cloud blob 1
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(size.width * 0.6 + offset1, size.height * 0.3),
@@ -391,7 +448,6 @@ class _CloudPainter extends CustomPainter {
       ),
       paint,
     );
-    // Cloud blob 2
     paint.color = Colors.white.withAlpha(10);
     canvas.drawOval(
       Rect.fromCenter(
@@ -401,11 +457,11 @@ class _CloudPainter extends CustomPainter {
       ),
       paint,
     );
-    // Star-like sparkle for clear nights
     paint.color = Colors.white.withAlpha(8);
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(size.width * 0.85 - offset1 * 0.5, size.height * 0.15),
+        center:
+            Offset(size.width * 0.85 - offset1 * 0.5, size.height * 0.15),
         width: 80,
         height: 40,
       ),

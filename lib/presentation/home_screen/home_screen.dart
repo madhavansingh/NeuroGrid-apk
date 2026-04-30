@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/app_export.dart';
+import '../../providers/location_provider.dart';
 import '../../providers/server_status_provider.dart';
 import '../../routes/app_routes.dart';
 import '../../widgets/server_wake_banner.dart';
@@ -45,10 +46,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
     );
     _entranceCtrl.forward();
-    // Kick off server health check for Render cold-start detection
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => ref.read(serverStatusProvider),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Server wake check
+      ref.read(serverStatusProvider);
+      // Kick off GPS so weather card gets real coordinates
+      final loc = ref.read(locationProvider);
+      if (!loc.hasLocation && !loc.loading) {
+        ref.read(locationProvider.notifier).fetchLocation();
+      }
+    });
   }
 
   @override

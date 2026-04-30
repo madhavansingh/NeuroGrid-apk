@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../theme/app_theme.dart';
 import '../../../core/services/weather_service.dart';
 import '../../../providers/city_state_provider.dart';
+import '../../../providers/weather_provider.dart';
 
 /// Quick Insights row on the home screen.
 /// - Traffic card: live from [cityStateProvider] → /api/v1/city/state
@@ -18,25 +19,6 @@ class QuickInsightsWidget extends ConsumerStatefulWidget {
 }
 
 class _QuickInsightsWidgetState extends ConsumerState<QuickInsightsWidget> {
-  final WeatherService _weatherService = WeatherService();
-  WeatherData? _weatherData;
-  bool _weatherLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadWeather();
-  }
-
-  Future<void> _loadWeather() async {
-    final data = await _weatherService.fetchWeather();
-    if (mounted) {
-      setState(() {
-        _weatherData = data;
-        _weatherLoading = false;
-      });
-    }
-  }
 
   // ── Traffic helpers ────────────────────────────────────────────────────────
 
@@ -207,25 +189,29 @@ class _QuickInsightsWidgetState extends ConsumerState<QuickInsightsWidget> {
             ),
             const SizedBox(width: 10),
 
-            // ── Weather card — unchanged ──────────────────────────────────
+            // ── Weather card — live from weatherProvider ───────────────────
             Expanded(
-              child: _weatherLoading
-                  ? _InsightCardSkeleton()
-                  : _InsightCard(
-                      icon: _weatherIcon(
-                        _weatherData?.condition ?? 'Clear',
-                      ),
-                      label: 'Weather',
-                      value: _weatherData?.conditionLabel ?? 'Clear',
-                      subtitle: _weatherData?.insightSubtitle ?? '—',
-                      iconBg: const Color(0xFFEFF6FF),
-                      iconColor: _weatherIconColor(
-                        _weatherData?.condition ?? 'Clear',
-                      ),
-                      valueColor: _weatherValueColor(
-                        _weatherData?.condition ?? 'Clear',
-                      ),
-                    ),
+              child: ref.watch(weatherProvider).when(
+                loading: () => _InsightCardSkeleton(),
+                error: (_, __) => _InsightCard(
+                  icon: Icons.wb_sunny_rounded,
+                  label: 'Weather',
+                  value: 'N/A',
+                  subtitle: '—',
+                  iconBg: const Color(0xFFEFF6FF),
+                  iconColor: const Color(0xFF0369A1),
+                  valueColor: const Color(0xFF0369A1),
+                ),
+                data: (w) => _InsightCard(
+                  icon: _weatherIcon(w.condition),
+                  label: 'Weather',
+                  value: w.conditionLabel,
+                  subtitle: w.insightSubtitle,
+                  iconBg: const Color(0xFFEFF6FF),
+                  iconColor: _weatherIconColor(w.condition),
+                  valueColor: _weatherValueColor(w.condition),
+                ),
+              ),
             ),
             const SizedBox(width: 10),
 
@@ -235,11 +221,11 @@ class _QuickInsightsWidgetState extends ConsumerState<QuickInsightsWidget> {
                 loading: () => _InsightCardSkeleton(),
                 error: (_, __) => _buildAlertsCard(
                   count: 0,
-                  weatherAlert: _weatherData?.hasAlert ?? false,
+                  weatherAlert: ref.watch(weatherProvider).valueOrNull?.hasAlert ?? false,
                 ),
                 data: (cityState) => _buildAlertsCard(
                   count: cityState?.alerts.length ?? 0,
-                  weatherAlert: _weatherData?.hasAlert ?? false,
+                  weatherAlert: ref.watch(weatherProvider).valueOrNull?.hasAlert ?? false,
                 ),
               ),
             ),
