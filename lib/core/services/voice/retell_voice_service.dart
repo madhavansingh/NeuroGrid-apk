@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -203,22 +204,44 @@ class RetellVoiceService {
           },
         },
       );
-      final responseData = response.data;
-      if (responseData == null) {
+
+      final raw = response.data;
+      debugPrint('[Retell] Raw backend response: $raw');
+
+      if (raw == null) {
         throw Exception('Empty response from voice backend.');
       }
-      // Handle both flat {access_token} and wrapped {data: {access_token}}
-      final Map<String, dynamic> payload =
-          (responseData['data'] is Map<String, dynamic>)
-              ? responseData['data'] as Map<String, dynamic>
-              : responseData as Map<String, dynamic>;
 
-      final token = payload['access_token'] as String?;
-      if (token == null || token.isEmpty) {
-        throw Exception(
-            'No access_token in response. Check Retell API key on backend.');
+      // Backend wraps as: {status, data: {success, data: {access_token, call_id}}}
+      // Unwrap up to 3 levels deep until we find access_token
+      Map<String, dynamic> payload = raw is Map<String, dynamic>
+          ? raw
+          : <String, dynamic>{};
+
+      for (int depth = 0; depth < 3; depth++) {
+        final token = payload['access_token'] as String?;
+        if (token != null && token.isNotEmpty) {
+          debugPrint('[Retell] access_token found at depth $depth');
+          return token;
+        }
+        // Try unwrapping one level via 'data'
+        final next = payload['data'];
+        if (next is Map<String, dynamic>) {
+          payload = next;
+        } else {
+          break;
+        }
       }
-      return token;
+
+      // Still not found — log full payload for debugging
+      debugPrint('[Retell] ERROR: access_token not found. Full payload: $raw');
+      throw Exception(
+          'No access_token in response. Backend payload: $raw\n'
+          'Check RETELL_API_KEY is set correctly on Render.');
+    } on DioException catch (e) {
+      final body = e.response?.data?.toString() ?? e.message;
+      debugPrint('[Retell] HTTP ${e.response?.statusCode}: $body');
+      throw Exception('Voice backend error ${e.response?.statusCode}: $body');
     } catch (e) {
       debugPrint('[Retell] _fetchAccessToken error: $e');
       rethrow;

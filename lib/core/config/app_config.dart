@@ -40,4 +40,10 @@ class AppConfig {
   static String get apiBaseUrl       => _get('API_BASE_URL');
   static String get supabaseUrl      => _get('SUPABASE_URL');
   static String get supabaseAnonKey  => _get('SUPABASE_ANON_KEY');
+
+  // ── Voice keys ───────────────────────────────────────────────────────────────
+  static String get retellApiKey      => _get('RETELL_API_KEY');
+  static String get retellAgentId     => _get('RETELL_AGENT_ID');
+  static String get elevenLabsApiKey  => _get('ELEVENLABS_API_KEY');
+  static String get elevenLabsVoiceId => _get('ELEVENLABS_VOICE_ID');
 }
