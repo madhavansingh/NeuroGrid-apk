@@ -7,7 +7,7 @@ import '../../providers/location_provider.dart';
 import '../../providers/server_status_provider.dart';
 import '../../routes/app_routes.dart';
 import '../../widgets/server_wake_banner.dart';
-import '../../widgets/voice_fab.dart';
+
 import './widgets/home_header_widget.dart';
 import './widgets/leave_now_card_widget.dart';
 import './widgets/quick_insights_widget.dart';
@@ -202,14 +202,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ),
       ),
       ),
-      floatingActionButton: const VoiceFab(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: AppNavigation(
         currentIndex: _navIndex,
         onTap: (i) {
           setState(() => _navIndex = i);
+          // 0=Home (stay), 1=Map, 2=Issues, 3=AI, 4=Profile
           if (i == 1) Navigator.pushNamed(context, AppRoutes.mapScreen);
-          if (i == 2) Navigator.pushNamed(context, AppRoutes.trafficScreen);
+          if (i == 2) Navigator.pushNamed(context, AppRoutes.civicIssuesScreen);
           if (i == 3) Navigator.pushNamed(context, AppRoutes.aiAssistantScreen);
           if (i == 4) Navigator.pushNamed(context, AppRoutes.profileScreen);
         },

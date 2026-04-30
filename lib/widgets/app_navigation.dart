@@ -5,7 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../routes/app_routes.dart';
 
 /// Premium frosted-glass floating navigation bar.
-/// Active tab gets a gradient indicator dot + icon scale-up + bold label.
+/// 5 real tabs: Home · Map · Issues · AI · Profile
+/// Centre slot is a Report Issue action (distinct from voice FAB).
 class AppNavigation extends StatefulWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -22,6 +23,7 @@ class AppNavigation extends StatefulWidget {
 
 class _AppNavigationState extends State<AppNavigation>
     with TickerProviderStateMixin {
+  // ── 5 tabs: Home, Map, Issues (centre), AI, Profile ──────────────────────
   static const _items = [
     _NavItem(
       icon: Icons.home_outlined,
@@ -33,11 +35,10 @@ class _AppNavigationState extends State<AppNavigation>
       activeIcon: Icons.map_rounded,
       label: 'Map',
     ),
-    // Centre slot — VoiceFAB lives here, empty spacer
     _NavItem(
-      icon: Icons.mic_none_rounded,
-      activeIcon: Icons.mic_rounded,
-      label: '',
+      icon: Icons.report_problem_outlined,
+      activeIcon: Icons.report_problem_rounded,
+      label: 'Issues',
       isCentre: true,
     ),
     _NavItem(
@@ -50,6 +51,15 @@ class _AppNavigationState extends State<AppNavigation>
       activeIcon: Icons.person_rounded,
       label: 'Profile',
     ),
+  ];
+
+  // Route map — index → route name (null means already on screen)
+  static const _routes = [
+    AppRoutes.homeScreen,      // 0 Home
+    AppRoutes.mapScreen,       // 1 Map
+    AppRoutes.civicIssuesScreen, // 2 Issues
+    AppRoutes.aiAssistantScreen, // 3 AI
+    AppRoutes.profileScreen,   // 4 Profile
   ];
 
   late final List<AnimationController> _scaleCtrl;
@@ -73,15 +83,16 @@ class _AppNavigationState extends State<AppNavigation>
     }).toList();
 
     // Trigger initial active tab
-    _scaleCtrl[widget.currentIndex].forward();
+    final safeIndex = widget.currentIndex.clamp(0, _items.length - 1);
+    _scaleCtrl[safeIndex].forward();
   }
 
   @override
   void didUpdateWidget(AppNavigation oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentIndex != widget.currentIndex) {
-      _scaleCtrl[oldWidget.currentIndex].reverse();
-      _scaleCtrl[widget.currentIndex].forward();
+      _scaleCtrl[oldWidget.currentIndex.clamp(0, _items.length - 1)].reverse();
+      _scaleCtrl[widget.currentIndex.clamp(0, _items.length - 1)].forward();
     }
   }
 
@@ -92,19 +103,11 @@ class _AppNavigationState extends State<AppNavigation>
   }
 
   void _handleTap(int index) {
-    if (_items[index].isCentre) return; // Voice FAB handles this
     HapticFeedback.selectionClick();
     widget.onTap(index);
-    // Route mapping (index offset due to centre slot)
-    final routes = [
-      AppRoutes.homeScreen,
-      AppRoutes.mapScreen,
-      null,
-      AppRoutes.aiAssistantScreen,
-      AppRoutes.profileScreen,
-    ];
-    final route = routes[index];
-    if (route != null && route != AppRoutes.homeScreen) {
+    final route = _routes[index];
+    // Don't navigate if already on home screen
+    if (route != AppRoutes.homeScreen) {
       Navigator.pushNamed(context, route);
     }
   }
@@ -141,11 +144,9 @@ class _AppNavigationState extends State<AppNavigation>
             child: Row(
               children: List.generate(_items.length, (i) {
                 final item = _items[i];
-                if (item.isCentre) {
-                  // Spacer for the centre FAB
-                  return const Expanded(child: SizedBox());
-                }
                 final isActive = widget.currentIndex == i;
+                final isCentre = item.isCentre;
+
                 return Expanded(
                   child: GestureDetector(
                     onTap: () => _handleTap(i),
@@ -154,10 +155,9 @@ class _AppNavigationState extends State<AppNavigation>
                       animation: _scaleAnim[i],
                       builder: (_, __) => Transform.scale(
                         scale: isActive ? _scaleAnim[i].value : 1.0,
-                        child: _TabContent(
-                          item: item,
-                          isActive: isActive,
-                        ),
+                        child: isCentre
+                            ? _CentreTab(isActive: isActive)
+                            : _TabContent(item: item, isActive: isActive),
                       ),
                     ),
                   ),
@@ -171,7 +171,67 @@ class _AppNavigationState extends State<AppNavigation>
   }
 }
 
-// ── Tab content ───────────────────────────────────────────────────────────────
+// ── Centre Issues tab (special styling) ──────────────────────────────────────
+
+class _CentreTab extends StatelessWidget {
+  final bool isActive;
+  const _CentreTab({required this.isActive});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            gradient: isActive
+                ? const LinearGradient(
+                    colors: [Color(0xFFFF6B35), Color(0xFFFF3B30)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: isActive ? null : const Color(0xFFFFF3F0),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFFFF3B30).withAlpha(70),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                : null,
+          ),
+          child: Icon(
+            isActive
+                ? Icons.report_problem_rounded
+                : Icons.report_problem_outlined,
+            size: 20,
+            color: isActive ? Colors.white : const Color(0xFFFF6B35),
+          ),
+        ),
+        const SizedBox(height: 3),
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 180),
+          style: GoogleFonts.dmSans(
+            fontSize: 10,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+            color: isActive
+                ? const Color(0xFFFF3B30)
+                : const Color(0xFF94A3B8),
+          ),
+          child: const Text('Issues'),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Regular tab content ───────────────────────────────────────────────────────
 
 class _TabContent extends StatelessWidget {
   final _NavItem item;
@@ -184,7 +244,6 @@ class _TabContent extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Icon with animated switcher
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 180),
           transitionBuilder: (child, anim) => ScaleTransition(
@@ -207,8 +266,7 @@ class _TabContent extends StatelessWidget {
             duration: const Duration(milliseconds: 180),
             style: GoogleFonts.dmSans(
               fontSize: 10,
-              fontWeight:
-                  isActive ? FontWeight.w700 : FontWeight.w500,
+              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
               color: isActive
                   ? const Color(0xFF1A6BF5)
                   : const Color(0xFF94A3B8),
@@ -219,7 +277,6 @@ class _TabContent extends StatelessWidget {
 
         const SizedBox(height: 2),
 
-        // Active indicator dot
         AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           width: isActive ? 18 : 0,

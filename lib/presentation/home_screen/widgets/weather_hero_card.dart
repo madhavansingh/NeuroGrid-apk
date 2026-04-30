@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/weather_service.dart';
 import '../../../providers/weather_provider.dart';
-import '../../../providers/location_provider.dart';
 
 /// Premium full-width weather card for the home screen.
 /// Reads real-time weather from [weatherProvider] (GPS-aware, no AppConfig race).
@@ -23,24 +22,14 @@ class _WeatherHeroCardState extends ConsumerState<WeatherHeroCard>
   @override
   void initState() {
     super.initState();
-
     _cloudCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 12),
     )..repeat(reverse: true);
-
     _shimmerCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
-
-    // Kick off GPS fetch so weatherProvider gets real coordinates
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final loc = ref.read(locationProvider);
-      if (!loc.hasLocation && !loc.loading) {
-        ref.read(locationProvider.notifier).fetchLocation();
-      }
-    });
   }
 
   @override
@@ -119,12 +108,11 @@ class _WeatherHeroCardState extends ConsumerState<WeatherHeroCard>
   @override
   Widget build(BuildContext context) {
     final weatherAsync = ref.watch(weatherProvider);
-    final locState = ref.watch(locationProvider);
 
     return weatherAsync.when(
       loading: () => _buildSkeleton(),
-      error: (_, __) => _buildWeatherCard(WeatherData.fallback, locState.areaLabel),
-      data: (d) => _buildWeatherCard(d, locState.areaLabel),
+      error: (_, __) => _buildWeatherCard(WeatherData.fallback, 'Bhopal, MP'),
+      data: (d) => _buildWeatherCard(d, 'Bhopal, MP'),
     );
   }
 

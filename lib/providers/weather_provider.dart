@@ -4,30 +4,28 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/config/app_config.dart';
 import '../core/services/weather_service.dart';
-import 'location_provider.dart';
 
-// ── Bhopal fallback coords (Oriental College, Patel Nagar) ────────────────
-const double _bhopalLat = 23.2599;
-const double _bhopalLon = 77.4126;
+// ── Bhopal default coords ─────────────────────────────────────────────────
+const double _defaultLat = 23.2599;
+const double _defaultLon = 77.4126;
 
 final _dio = Dio(BaseOptions(
-  connectTimeout: const Duration(seconds: 10),
-  receiveTimeout: const Duration(seconds: 10),
+  connectTimeout: const Duration(seconds: 12),
+  receiveTimeout: const Duration(seconds: 12),
 ));
 
-/// Auto-fetches real weather using GPS coordinates from [locationProvider].
-/// Falls back to Bhopal center if location is unavailable.
-/// Returns [WeatherData.fallback] if API key missing or network fails.
+/// Fetches real weather for Bhopal (or device GPS if available).
+/// 
+/// Does NOT depend on locationProvider — it fetches weather immediately
+/// with Bhopal coords so the card never stays in loading state.
+/// GPS upgrade happens via [weatherWithLocationProvider].
 final weatherProvider = FutureProvider<WeatherData>((ref) async {
-  // Wait for location (GPS or fallback) to be resolved
-  final locState = ref.watch(locationProvider);
-
-  final lat = locState.hasLocation ? locState.latitude! : _bhopalLat;
-  final lon = locState.hasLocation ? locState.longitude! : _bhopalLon;
-
   final apiKey = AppConfig.openWeatherKey;
+
+  debugPrint('[WeatherProvider] API key length: ${apiKey.length}');
+
   if (apiKey.isEmpty) {
-    debugPrint('[WeatherProvider] OPENWEATHER_API_KEY not set — using fallback');
+    debugPrint('[WeatherProvider] No API key — returning fallback');
     return WeatherData.fallback;
   }
 
@@ -35,8 +33,8 @@ final weatherProvider = FutureProvider<WeatherData>((ref) async {
     final response = await _dio.get<dynamic>(
       'https://api.openweathermap.org/data/2.5/weather',
       queryParameters: {
-        'lat': lat,
-        'lon': lon,
+        'lat': _defaultLat,
+        'lon': _defaultLon,
         'appid': apiKey,
         'units': 'metric',
         'lang': 'en',
@@ -51,19 +49,19 @@ final weatherProvider = FutureProvider<WeatherData>((ref) async {
 
       final weather = WeatherData.fromJson(data);
       debugPrint(
-        '[WeatherProvider] ✓ ${data['name']} — '
+        '[WeatherProvider] ✓ ${data['name']} '
         '${weather.tempCelsius.round()}°C ${weather.conditionLabel}',
       );
       return weather;
     }
 
-    debugPrint('[WeatherProvider] HTTP ${response.statusCode} — using fallback');
+    debugPrint('[WeatherProvider] HTTP ${response.statusCode}');
     return WeatherData.fallback;
   } on DioException catch (e) {
-    debugPrint('[WeatherProvider] Error: ${e.response?.statusCode} ${e.message}');
+    debugPrint('[WeatherProvider] DioError ${e.response?.statusCode}: ${e.message}');
     return WeatherData.fallback;
   } catch (e) {
-    debugPrint('[WeatherProvider] Unexpected: $e');
+    debugPrint('[WeatherProvider] Error: $e');
     return WeatherData.fallback;
   }
 });
